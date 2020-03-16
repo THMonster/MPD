@@ -122,7 +122,7 @@ TidalInputStream::OnTidalTrackSuccess(std::string url) noexcept
 	track_request.reset();
 
 	try {
-		SetInput(OpenCurlInputStream(url.c_str(), {},
+		SetInput(OpenCurlInputStream(url.c_str(), {{"ForceSeekable", "1"}},
 					     mutex));
 	} catch (...) {
 		Failed(std::current_exception());

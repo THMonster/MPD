@@ -33,9 +33,13 @@
 #include "Handler.hxx"
 #include "event/Call.hxx"
 #include "util/RuntimeError.hxx"
+#include "util/StringFormat.hxx"
 #include "util/StringStrip.hxx"
 #include "util/StringView.hxx"
 #include "util/CharUtil.hxx"
+#include "util/Domain.hxx"
+#include "Log.hxx"
+
 
 #include <curl/curl.h>
 

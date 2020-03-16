@@ -77,6 +77,9 @@ class CurlInputStream final : public AsyncInputStream, CurlResponseHandler {
 	/** parser for icy-metadata */
 	std::shared_ptr<IcyMetaDataParser> icy;
 
+	bool reconnect = false;
+  size_t appended_data = 0;
+
 public:
 	template<typename I>
 	CurlInputStream(EventLoop &event_loop, const char *_url,
@@ -92,6 +95,7 @@ public:
 	static InputStreamPtr Open(const char *url,
 				   const std::multimap<std::string, std::string> &headers,
 				   Mutex &mutex);
+	void SetSeekable();
 
 private:
 	/**
@@ -198,6 +202,11 @@ CurlInputStream::OnHeaders(unsigned status,
 
 	const std::lock_guard<Mutex> protect(mutex);
 
+	if (reconnect == true) {
+		reconnect = false;
+		return;
+	}
+
 	if (IsSeekPending()) {
 		/* don't update metadata while seeking */
 		SeekDone();
@@ -208,12 +217,14 @@ CurlInputStream::OnHeaders(unsigned status,
 		seekable = true;
 
 	auto i = headers.find("content-length");
-	if (i != headers.end())
-		size = offset + ParseUint64(i->second.c_str());
+	if (i != headers.end()) {
+    size = offset + ParseUint64(i->second.c_str());
+    appended_data = offset;
+  }
 
 	i = headers.find("content-type");
 	if (i != headers.end())
-		SetMimeType(std::move(i->second));
+			SetMimeType(std::move(i->second));
 
 	i = headers.find("icy-name");
 	if (i == headers.end()) {
@@ -268,6 +279,7 @@ CurlInputStream::OnData(ConstBuffer<void> data)
 	}
 
 	AppendToBuffer(data.data, data.size);
+  appended_data += data.size;
 }
 
 void
@@ -283,16 +295,34 @@ void
 CurlInputStream::OnError(std::exception_ptr e) noexcept
 {
 	const std::lock_guard<Mutex> protect(mutex);
-	postponed_exception = std::move(e);
 
-	if (IsSeekPending())
-		SeekDone();
-	else if (!IsReady())
-		SetReady();
-	else
-		InvokeOnAvailable();
+  if (seekable == false) {
+    postponed_exception = std::move(e);
 
-	AsyncInputStream::SetClosed();
+    if (IsSeekPending())
+      SeekDone();
+    else if (!IsReady())
+      SetReady();
+    else
+      InvokeOnAvailable();
+
+    AsyncInputStream::SetClosed();
+  } else {
+    FormatDebug(curl_domain, "reconnect at %d", appended_data);
+
+    FreeEasy();
+    InitEasy();
+
+    /* send the "Range" header */
+
+    if (offset > 0)
+      request->SetOption(
+          CURLOPT_RANGE,
+          StringFormat<40>("%" PRIoffset "-", appended_data).c_str());
+
+    reconnect = true;
+    StartRequest();
+  }
 }
 
 /*
@@ -350,13 +380,24 @@ CurlInputStream::CurlInputStream(EventLoop &event_loop, const char *_url,
 {
 	request_headers.Append("Icy-Metadata: 1");
 
-	for (const auto &i : headers)
+	for (const auto &i : headers) {
+    if (i.first.compare("ForceSeekable") == 0) {
+      seekable = true;
+      continue;
+    }
 		request_headers.Append((i.first + ":" + i.second).c_str());
+  }
 }
 
 CurlInputStream::~CurlInputStream() noexcept
 {
 	FreeEasyIndirect();
+}
+
+void
+CurlInputStream::SetSeekable()
+{
+	seekable = true;
 }
 
 void
@@ -383,6 +424,12 @@ CurlInputStream::InitEasy()
 	request->SetOption(CURLOPT_SSL_VERIFYPEER, verify_peer ? 1l : 0l);
 	request->SetOption(CURLOPT_SSL_VERIFYHOST, verify_host ? 2l : 0l);
 	request->SetOption(CURLOPT_HTTPHEADER, request_headers.Get());
+
+  /* abort if slower than x kbytes/sec during y seconds */
+  if (seekable == true) {
+    request->SetOption(CURLOPT_LOW_SPEED_TIME, 15l);
+    request->SetOption(CURLOPT_LOW_SPEED_LIMIT, 80000l);
+  }
 }
 
 void
