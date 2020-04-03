@@ -1,5 +1,8 @@
 /*
- * Copyright (C) 2008-2017 Max Kellermann <max.kellermann@gmail.com>
+ * Copyright 2020 Max Kellermann <max.kellermann@gmail.com>
+ * All rights reserved.
+ *
+ * author: Max Kellermann <mk@cm4all.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,44 +30,36 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CURL_INIT_HXX
-#define CURL_INIT_HXX
+#include "time/Convert.hxx"
 
-class Mutex;
-class EventLoop;
-class CurlGlobal;
+#include <gtest/gtest.h>
 
-/**
- * This class performs one-time initialization of libCURL and creates
- * one #CurlGlobal instance, shared across all #CurlInit instances.
- */
-class CurlInit {
-	static Mutex mutex;
-	static unsigned ref;
-	static CurlGlobal *instance;
-
-public:
-	explicit CurlInit(EventLoop &event_loop);
-	~CurlInit() noexcept;
-
-	CurlInit(const CurlInit &) = delete;
-	CurlInit &operator=(const CurlInit &) = delete;
-
-	CurlGlobal &operator*() noexcept {
-		return *instance;
-	}
-
-	const CurlGlobal &operator*() const noexcept {
-		return *instance;
-	}
-
-	CurlGlobal *operator->() noexcept {
-		return instance;
-	}
-
-	const CurlGlobal *operator->() const noexcept {
-		return instance;
-	}
+static constexpr time_t times[] = {
+	1234567890,
+	1580566807,
+	1585750807,
+	1590934807,
 };
 
-#endif
+TEST(Time, LocalTime)
+{
+	/* convert back and forth using local time zone */
+
+	for (const auto t : times) {
+		auto tp = std::chrono::system_clock::from_time_t(t);
+		auto tm = LocalTime(tp);
+		EXPECT_EQ(MakeTime(tm), tp);
+	}
+}
+
+TEST(Time, GmTime)
+{
+	/* convert back and forth using UTC */
+
+	for (const auto t : times) {
+		auto tp = std::chrono::system_clock::from_time_t(t);
+		auto tm = GmTime(tp);
+		EXPECT_EQ(std::chrono::system_clock::to_time_t(TimeGm(tm)),
+			  t);
+	}
+}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -17,42 +17,26 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef MPD_GUNZIP_READER_HXX
-#define MPD_GUNZIP_READER_HXX
+#ifndef MPD_ANDROID_AUDIO_MANAGER_HXX
+#define MPD_ANDROID_AUDIO_MANAGER_HXX
 
-#include "Reader.hxx"
-#include "util/StaticFifoBuffer.hxx"
-#include "util/Compiler.h"
+#include "java/Object.hxx"
 
-#include <zlib.h>
-
-/**
- * A filter that decompresses data using zlib.
- */
-class GunzipReader final : public Reader {
-	Reader &next;
-
-	bool eof = false;
-
-	z_stream z;
-
-	StaticFifoBuffer<Bytef, 65536> buffer;
+class AudioManager : public Java::GlobalObject {
+	int maxVolume;
+	jmethodID getStreamVolumeMethod;
+	jmethodID setStreamVolumeMethod;
 
 public:
-	/**
-	 * Construct the filter.
-	 */
-	explicit GunzipReader(Reader &_next);
+	AudioManager(JNIEnv *env, jobject obj) noexcept;
 
-	~GunzipReader() {
-		inflateEnd(&z);
-	}
+	AudioManager(std::nullptr_t) noexcept { maxVolume = 0; }
 
-	/* virtual methods from class Reader */
-	size_t Read(void *data, size_t size) override;
+	~AudioManager() noexcept {}
 
-private:
-	bool FillBuffer();
+	int GetMaxVolume() { return maxVolume; }
+	int GetVolume(JNIEnv *env);
+	void SetVolume(JNIEnv *env, int);
 };
 
 #endif

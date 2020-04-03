@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2019 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,10 +20,13 @@
 #include "Context.hxx"
 #include "java/Class.hxx"
 #include "java/File.hxx"
+#include "java/String.hxx"
 #include "fs/AllocatedPath.hxx"
 
+#include "AudioManager.hxx"
+
 AllocatedPath
-Context::GetCacheDir(JNIEnv *env) const
+Context::GetCacheDir(JNIEnv *env) const noexcept
 {
 	assert(env != nullptr);
 
@@ -39,4 +42,22 @@ Context::GetCacheDir(JNIEnv *env) const
 	}
 
 	return Java::File::ToAbsolutePath(env, file);
+}
+
+AudioManager *
+Context::GetAudioManager(JNIEnv *env) noexcept
+{
+	assert(env != nullptr);
+
+	Java::Class cls(env, env->GetObjectClass(Get()));
+	jmethodID method = env->GetMethodID(cls, "getSystemService",
+					    "(Ljava/lang/String;)Ljava/lang/Object;");
+	assert(method);
+
+	Java::String name(env, "audio");
+	jobject am = env->CallObjectMethod(Get(), method, name.Get());
+	if (Java::DiscardException(env) || am == nullptr)
+		return nullptr;
+
+    return new AudioManager(env, am);
 }

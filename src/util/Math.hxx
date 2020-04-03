@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2017 Max Kellermann <max.kellermann@gmail.com>
+ * Copyright (C) 2018 Max Kellermann <max.kellermann@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,44 +27,15 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CURL_INIT_HXX
-#define CURL_INIT_HXX
+#ifndef MATH_HXX
+#define MATH_HXX
 
-class Mutex;
-class EventLoop;
-class CurlGlobal;
-
-/**
- * This class performs one-time initialization of libCURL and creates
- * one #CurlGlobal instance, shared across all #CurlInit instances.
- */
-class CurlInit {
-	static Mutex mutex;
-	static unsigned ref;
-	static CurlGlobal *instance;
-
-public:
-	explicit CurlInit(EventLoop &event_loop);
-	~CurlInit() noexcept;
-
-	CurlInit(const CurlInit &) = delete;
-	CurlInit &operator=(const CurlInit &) = delete;
-
-	CurlGlobal &operator*() noexcept {
-		return *instance;
-	}
-
-	const CurlGlobal &operator*() const noexcept {
-		return *instance;
-	}
-
-	CurlGlobal *operator->() noexcept {
-		return instance;
-	}
-
-	const CurlGlobal *operator->() const noexcept {
-		return instance;
-	}
-};
+#if (defined(__GLIBCPP__) || defined(__GLIBCXX__)) && !defined(_GLIBCXX_USE_C99_MATH)
+#include <boost/math/special_functions/round.hpp>
+using boost::math::lround;
+#else
+#include <cmath>
+using std::lround;
+#endif
 
 #endif

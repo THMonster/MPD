@@ -1,7 +1,7 @@
 project(
   'mpd',
   ['c', 'cpp'],
-  version: '0.21.21',
+  version: '0.21.22',
   meson_version: '>= 0.49.0',
   default_options: [
     'c_std=c99',
@@ -290,6 +290,7 @@ if not is_android
 else
   sources += [
     'src/android/Context.cxx',
+    'src/android/AudioManager.cxx',
     'src/android/Environment.cxx',
     'src/android/LogListener.cxx',
   ]
@@ -311,6 +312,7 @@ subdir('src/util')
 subdir('src/time')
 subdir('src/system')
 subdir('src/thread')
+subdir('src/net')
 subdir('src/event')
 
 subdir('src/lib/dbus')
@@ -335,7 +337,6 @@ subdir('src/lib/yajl')
 
 subdir('src/fs')
 subdir('src/config')
-subdir('src/net')
 subdir('src/tag')
 subdir('src/pcm')
 subdir('src/neighbor')

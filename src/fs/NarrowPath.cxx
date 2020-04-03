@@ -17,42 +17,39 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef MPD_GUNZIP_READER_HXX
-#define MPD_GUNZIP_READER_HXX
+#include "NarrowPath.hxx"
 
-#include "Reader.hxx"
-#include "util/StaticFifoBuffer.hxx"
-#include "util/Compiler.h"
+#ifdef _UNICODE
 
-#include <zlib.h>
+#include "lib/icu/Win32.hxx"
+#include "system/Error.hxx"
+#include "util/Macros.hxx"
 
-/**
- * A filter that decompresses data using zlib.
- */
-class GunzipReader final : public Reader {
-	Reader &next;
+#include <windows.h>
 
-	bool eof = false;
+NarrowPath::NarrowPath(Path _path) noexcept
+	:value(WideCharToMultiByte(CP_ACP, _path.c_str()))
+{
+	if (value.IsNull())
+		/* fall back to empty string */
+		value = Value::Empty();
+}
 
-	z_stream z;
+static AllocatedPath
+AcpToAllocatedPath(const char *s)
+{
+	wchar_t buffer[MAX_PATH];
+	auto result = MultiByteToWideChar(CP_ACP, 0, s, -1,
+					  buffer, ARRAY_SIZE(buffer));
+	if (result <= 0)
+		throw MakeLastError("MultiByteToWideChar() failed");
 
-	StaticFifoBuffer<Bytef, 65536> buffer;
+	return AllocatedPath::FromFS(buffer);
+}
 
-public:
-	/**
-	 * Construct the filter.
-	 */
-	explicit GunzipReader(Reader &_next);
+FromNarrowPath::FromNarrowPath(const char *s)
+	:value(AcpToAllocatedPath(s))
+{
+}
 
-	~GunzipReader() {
-		inflateEnd(&z);
-	}
-
-	/* virtual methods from class Reader */
-	size_t Read(void *data, size_t size) override;
-
-private:
-	bool FillBuffer();
-};
-
-#endif
+#endif /* _UNICODE */

@@ -50,19 +50,12 @@ class CurlGlobal final {
 public:
 	explicit CurlGlobal(EventLoop &_loop);
 
-	EventLoop &GetEventLoop() noexcept {
+	auto &GetEventLoop() const noexcept {
 		return timeout_event.GetEventLoop();
 	}
 
 	void Add(CURL *easy, CurlRequest &request);
 	void Remove(CURL *easy) noexcept;
-
-	/**
-	 * Check for finished HTTP responses.
-	 *
-	 * Runs in the I/O thread.  The caller must not hold locks.
-	 */
-	void ReadInfo() noexcept;
 
 	void Assign(curl_socket_t fd, CurlSocket &cs) noexcept {
 		curl_multi_assign(multi.Get(), fd, &cs);
@@ -70,13 +63,20 @@ public:
 
 	void SocketAction(curl_socket_t fd, int ev_bitmask) noexcept;
 
-	void InvalidateSockets() {
+	void InvalidateSockets() noexcept {
 		SocketAction(CURL_SOCKET_TIMEOUT, 0);
 	}
 
 private:
+	/**
+	 * Check for finished HTTP responses.
+	 *
+	 * Runs in the I/O thread.  The caller must not hold locks.
+	 */
+	void ReadInfo() noexcept;
+
 	void UpdateTimeout(long timeout_ms) noexcept;
-	static int TimerFunction(CURLM *global, long timeout_ms,
+	static int TimerFunction(CURLM *multi, long timeout_ms,
 				 void *userp) noexcept;
 
 	/* callback for #timeout_event */
