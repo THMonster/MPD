@@ -23,13 +23,23 @@
 #include "util/Compiler.h"
 #include "util/AllocatedString.hxx"
 
+#ifdef _WIN32
+#include <wchar.h>
+#endif
+
 /**
  * This class can compare one string ("needle") with lots of other
  * strings ("haystacks") efficiently, ignoring case.  With some
  * configurations, it can prepare a case-folded version of the needle.
  */
 class IcuCompare {
+#ifdef _WIN32
+	/* Windows API functions work with wchar_t strings, so let's
+	   cache the MultiByteToWideChar() result for performance */
+	AllocatedString<wchar_t> needle;
+#else
 	AllocatedString<> needle;
+#endif
 
 public:
 	IcuCompare():needle(nullptr) {}
@@ -38,12 +48,12 @@ public:
 
 	IcuCompare(const IcuCompare &src) noexcept
 		:needle(src
-			? AllocatedString<>::Duplicate(src.needle.c_str())
+			? src.needle.Clone()
 			: nullptr) {}
 
 	IcuCompare &operator=(const IcuCompare &src) noexcept {
 		needle = src
-			? AllocatedString<>::Duplicate(src.needle.c_str())
+			? src.needle.Clone()
 			: nullptr;
 		return *this;
 	}
