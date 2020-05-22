@@ -308,7 +308,7 @@ CurlInputStream::OnError(std::exception_ptr e) noexcept
 
     AsyncInputStream::SetClosed();
   } else {
-    FormatDebug(curl_domain, "reconnect at %d", appended_data);
+    FormatWarning(curl_domain, "reconnect at %d", appended_data);
 
     FreeEasy();
     InitEasy();
@@ -427,8 +427,8 @@ CurlInputStream::InitEasy()
 
   /* abort if slower than x kbytes/sec during y seconds */
   if (seekable == true) {
-    request->SetOption(CURLOPT_LOW_SPEED_TIME, 15l);
-    request->SetOption(CURLOPT_LOW_SPEED_LIMIT, 80000l);
+    request->SetOption(CURLOPT_LOW_SPEED_TIME, 5l);
+    request->SetOption(CURLOPT_LOW_SPEED_LIMIT, 500000l);
   }
 }
 

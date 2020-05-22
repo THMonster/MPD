@@ -18,23 +18,27 @@
  */
 
 #include "QobuzInputPlugin.hxx"
-#include "QobuzClient.hxx"
-#include "QobuzTrackRequest.hxx"
-#include "QobuzTagScanner.hxx"
 #include "CurlInputPlugin.hxx"
+#include "Log.hxx"
 #include "PluginUnavailable.hxx"
-#include "input/ProxyInputStream.hxx"
+#include "QobuzClient.hxx"
+#include "QobuzTagScanner.hxx"
+#include "QobuzTrackRequest.hxx"
+#include "config/Block.hxx"
 #include "input/FailingInputStream.hxx"
 #include "input/InputPlugin.hxx"
-#include "config/Block.hxx"
+#include "input/ProxyInputStream.hxx"
 #include "lib/gcrypt/Init.hxx"
 #include "thread/Mutex.hxx"
+#include "util/Domain.hxx"
 #include "util/StringCompare.hxx"
 
 #include <stdexcept>
 #include <memory>
 
 #include <time.h>
+
+static constexpr Domain qobuz_domain("qobuz");
 
 static QobuzClient *qobuz_client;
 
@@ -109,7 +113,10 @@ QobuzInputStream::OnQobuzTrackSuccess(std::string url) noexcept
 	try {
 		SetInput(OpenCurlInputStream(url.c_str(), {},
 					     mutex));
-	} catch (...) {
+    FormatInfo(qobuz_domain,
+               "Qobuz music file: %s",
+               url.c_str());
+        } catch (...) {
 		Failed(std::current_exception());
 	}
 }
