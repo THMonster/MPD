@@ -4,6 +4,7 @@ from os.path import abspath
 from build.project import Project
 from build.zlib import ZlibProject
 from build.meson import MesonProject
+from build.cmake import CmakeProject
 from build.autotools import AutotoolsProject
 from build.ffmpeg import FfmpegProject
 from build.boost import BoostProject
@@ -111,9 +112,44 @@ liblame = AutotoolsProject(
     ],
 )
 
+libmodplug = AutotoolsProject(
+    'https://downloads.sourceforge.net/modplug-xmms/libmodplug/0.8.9.0/libmodplug-0.8.9.0.tar.gz',
+    '457ca5a6c179656d66c01505c0d95fafaead4329b9dbaa0f997d00a3508ad9de',
+    'lib/libmodplug.a',
+    [
+        '--disable-shared', '--enable-static',
+    ],
+)
+
+wildmidi = CmakeProject(
+    'https://codeload.github.com/Mindwerks/wildmidi/tar.gz/wildmidi-0.4.3',
+    '498e5a96455bb4b91b37188ad6dcb070824e92c44f5ed452b90adbaec8eef3c5',
+    'lib/libWildMidi.a',
+    [
+        '-DBUILD_SHARED_LIBS=OFF',
+        '-DWANT_PLAYER=OFF',
+        '-DWANT_STATIC=ON',
+    ],
+    base='wildmidi-wildmidi-0.4.3',
+    name='wildmidi',
+    version='0.4.3',
+)
+
+gme = CmakeProject(
+    'https://bitbucket.org/mpyne/game-music-emu/downloads/game-music-emu-0.6.3.tar.xz',
+    'aba34e53ef0ec6a34b58b84e28bf8cfbccee6585cebca25333604c35db3e051d',
+    'lib/libgme.a',
+    [
+        '-DBUILD_SHARED_LIBS=OFF',
+        '-DENABLE_UBSAN=OFF',
+        '-DZLIB_INCLUDE_DIR=OFF',
+        '-DSDL2_DIR=OFF',
+    ],
+)
+
 ffmpeg = FfmpegProject(
-    'http://ffmpeg.org/releases/ffmpeg-4.2.2.tar.xz',
-    'cb754255ab0ee2ea5f66f8850e1bd6ad5cac1cd855d0a2f4990fb8c668b0d29c',
+    'http://ffmpeg.org/releases/ffmpeg-4.2.3.tar.xz',
+    '9df6c90aed1337634c1fb026fb01c154c29c82a64ea71291ff2da9aacb9aad31',
     'lib/libavcodec.a',
     [
         '--disable-shared', '--enable-static',
@@ -341,8 +377,8 @@ ffmpeg = FfmpegProject(
 )
 
 curl = AutotoolsProject(
-    'http://curl.haxx.se/download/curl-7.69.1.tar.xz',
-    '03c7d5e6697f7b7e40ada1b2256e565a555657398e6c1fcfa4cb251ccd819d4f',
+    'http://curl.haxx.se/download/curl-7.70.0.tar.xz',
+    '032f43f2674008c761af19bf536374128c16241fb234699a55f9fb603fcfbae7',
     'lib/libcurl.a',
     [
         '--disable-shared', '--enable-static',
@@ -397,7 +433,7 @@ libnfs = AutotoolsProject(
 )
 
 boost = BoostProject(
-    'https://dl.bintray.com/boostorg/release/1.72.0/source/boost_1_72_0.tar.bz2',
-    '59c9b274bc451cf91a9ba1dd2c7fdcaf5d60b1b3aa83f2c9fa143417cc660722',
+    'https://dl.bintray.com/boostorg/release/1.73.0/source/boost_1_73_0.tar.bz2',
+    '4eb3b8d442b426dc35346235c8733b5ae35ba431690e38c6a8263dce9fcbb402',
     'include/boost/version.hpp',
 )

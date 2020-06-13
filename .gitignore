@@ -11,3 +11,5 @@ CMakeLists.txt
 compile_commands.json
 cmakebuild/
 .ccls-cache/
+/.clangd/
+/compile_commands.json

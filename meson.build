@@ -1,11 +1,12 @@
 project(
   'mpd',
   ['c', 'cpp'],
-  version: '0.21.23',
+  version: '0.21.24',
   meson_version: '>= 0.49.0',
   default_options: [
     'c_std=c99',
-    'cpp_std=c++14'
+    'cpp_std=c++14',
+    'warning_level=2',
   ],
   license: 'GPLv2+',
 )
@@ -40,9 +41,6 @@ common_cxxflags = [
 ]
 
 test_common_flags = [
-  '-Wall',
-  '-Wextra',
-
   '-fvisibility=hidden',
 
   '-ffast-math',
@@ -142,7 +140,13 @@ conf.set('HAVE_GETPWNAM_R', compiler.has_function('getpwnam_r'))
 conf.set('HAVE_GETPWUID_R', compiler.has_function('getpwuid_r'))
 conf.set('HAVE_INITGROUPS', compiler.has_function('initgroups'))
 conf.set('HAVE_FNMATCH', compiler.has_function('fnmatch'))
-conf.set('HAVE_STRNDUP', compiler.has_function('strndup', prefix: '#define _GNU_SOURCE\n#include <string.h>'))
+
+# Explicitly exclude Windows in this check because
+# https://github.com/mesonbuild/meson/issues/3672 (reported in 2018,
+# still not fixed in 2020) causes Meson to believe it exists, because
+# __builtin_strndup() exists (but strndup() still cannot be used).
+conf.set('HAVE_STRNDUP', not is_windows and compiler.has_function('strndup', prefix: '#define _GNU_SOURCE\n#include <string.h>'))
+
 conf.set('HAVE_STRCASESTR', compiler.has_function('strcasestr'))
 
 conf.set('HAVE_PRCTL', is_linux)
