@@ -1,7 +1,7 @@
 project(
   'mpd',
   ['c', 'cpp'],
-  version: '0.21.24',
+  version: '0.21.25',
   meson_version: '>= 0.49.0',
   default_options: [
     'c_std=c99',
@@ -318,6 +318,8 @@ subdir('src/system')
 subdir('src/thread')
 subdir('src/net')
 subdir('src/event')
+
+subdir('src/apple')
 
 subdir('src/lib/dbus')
 subdir('src/lib/icu')

@@ -32,7 +32,7 @@
 #include "input/InputStream.hxx"
 #include "CheckAudioFormat.hxx"
 #include "util/bit_reverse.h"
-#include "system/ByteOrder.hxx"
+#include "util/ByteOrder.hxx"
 #include "tag/Handler.hxx"
 #include "DsdLib.hxx"
 #include "Log.hxx"
@@ -449,7 +449,7 @@ dsdiff_stream_decode(DecoderClient &client, InputStream &is)
 }
 
 static bool
-dsdiff_scan_stream(InputStream &is, TagHandler &handler) noexcept
+dsdiff_scan_stream(InputStream &is, TagHandler &handler)
 {
 	DsdiffMetaData metadata;
 	DsdiffChunkHeader chunk_header;

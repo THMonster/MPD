@@ -33,7 +33,7 @@
 #include "input/InputStream.hxx"
 #include "CheckAudioFormat.hxx"
 #include "util/bit_reverse.h"
-#include "system/ByteOrder.hxx"
+#include "util/ByteOrder.hxx"
 #include "DsdLib.hxx"
 #include "tag/Handler.hxx"
 #include "Log.hxx"
@@ -326,7 +326,7 @@ dsf_stream_decode(DecoderClient &client, InputStream &is)
 }
 
 static bool
-dsf_scan_stream(InputStream &is, TagHandler &handler) noexcept
+dsf_scan_stream(InputStream &is, TagHandler &handler)
 {
 	/* check DSF metadata */
 	DsfMetaData metadata;
