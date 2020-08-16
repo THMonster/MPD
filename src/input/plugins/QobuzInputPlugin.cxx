@@ -111,7 +111,7 @@ QobuzInputStream::OnQobuzTrackSuccess(std::string url) noexcept
 	track_request.reset();
 
 	try {
-		SetInput(OpenCurlInputStream(url.c_str(), {},
+		SetInput(OpenCurlInputStream(url.c_str(), {{"ForceSeekable", "1"}},
 					     mutex));
     FormatInfo(qobuz_domain,
                "Qobuz music file: %s",

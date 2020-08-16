@@ -78,7 +78,6 @@ class CurlInputStream final : public AsyncInputStream, CurlResponseHandler {
 	std::shared_ptr<IcyMetaDataParser> icy;
 
 	bool reconnect = false;
-  size_t appended_data = 0;
 
 public:
 	template<typename I>
@@ -219,7 +218,6 @@ CurlInputStream::OnHeaders(unsigned status,
 	auto i = headers.find("content-length");
 	if (i != headers.end()) {
     size = offset + ParseUint64(i->second.c_str());
-    appended_data = offset;
   }
 
 	i = headers.find("content-type");
@@ -279,7 +277,6 @@ CurlInputStream::OnData(ConstBuffer<void> data)
 	}
 
 	AppendToBuffer(data.data, data.size);
-  appended_data += data.size;
 }
 
 void
@@ -308,7 +305,12 @@ CurlInputStream::OnError(std::exception_ptr e) noexcept
 
     AsyncInputStream::SetClosed();
   } else {
-    FormatWarning(curl_domain, "reconnect at %d", appended_data);
+    if (IsSeekPending()) {
+      SeekDone();
+      AsyncInputStream::SetClosed();
+      return;
+    }
+    FormatWarning(curl_domain, "reconnect at %d", offset);
 
     FreeEasy();
     InitEasy();
@@ -318,7 +320,7 @@ CurlInputStream::OnError(std::exception_ptr e) noexcept
     if (offset > 0)
       request->SetOption(
           CURLOPT_RANGE,
-          StringFormat<40>("%" PRIoffset "-", appended_data).c_str());
+          StringFormat<40>("%" PRIoffset "-", offset).c_str());
 
     reconnect = true;
     StartRequest();
@@ -425,10 +427,11 @@ CurlInputStream::InitEasy()
 	request->SetOption(CURLOPT_SSL_VERIFYHOST, verify_host ? 2L : 0L);
 	request->SetOption(CURLOPT_HTTPHEADER, request_headers.Get());
 
-  /* abort if slower than x kbytes/sec during y seconds */
+  /* abort if slower than x bytes/sec during y seconds */
   if (seekable == true) {
-    request->SetOption(CURLOPT_LOW_SPEED_TIME, 5l);
-    request->SetOption(CURLOPT_LOW_SPEED_LIMIT, 500000l);
+    FormatDebug(curl_domain, "set low speed limit");
+    request->SetOption(CURLOPT_LOW_SPEED_LIMIT, 500000L);
+    request->SetOption(CURLOPT_LOW_SPEED_TIME, 5L);
   }
 }
 
