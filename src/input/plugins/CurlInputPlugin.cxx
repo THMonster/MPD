@@ -78,6 +78,7 @@ class CurlInputStream final : public AsyncInputStream, CurlResponseHandler {
 	std::shared_ptr<IcyMetaDataParser> icy;
 
 	bool reconnect = false;
+  size_t appended_data = 0;
 
 public:
 	template<typename I>
@@ -208,6 +209,7 @@ CurlInputStream::OnHeaders(unsigned status,
 
 	if (IsSeekPending()) {
 		/* don't update metadata while seeking */
+    appended_data = offset;
 		SeekDone();
 		return;
 	}
@@ -218,6 +220,7 @@ CurlInputStream::OnHeaders(unsigned status,
 	auto i = headers.find("content-length");
 	if (i != headers.end()) {
     size = offset + ParseUint64(i->second.c_str());
+    appended_data = offset;
   }
 
 	i = headers.find("content-type");
@@ -277,6 +280,7 @@ CurlInputStream::OnData(ConstBuffer<void> data)
 	}
 
 	AppendToBuffer(data.data, data.size);
+  appended_data += data.size;
 }
 
 void
@@ -310,7 +314,7 @@ CurlInputStream::OnError(std::exception_ptr e) noexcept
       AsyncInputStream::SetClosed();
       return;
     }
-    FormatWarning(curl_domain, "reconnect at %d", offset);
+    FormatWarning(curl_domain, "reconnect at %d", appended_data);
 
     FreeEasy();
     InitEasy();
@@ -320,7 +324,7 @@ CurlInputStream::OnError(std::exception_ptr e) noexcept
     if (offset > 0)
       request->SetOption(
           CURLOPT_RANGE,
-          StringFormat<40>("%" PRIoffset "-", offset).c_str());
+          StringFormat<40>("%" PRIoffset "-", appended_data).c_str());
 
     reconnect = true;
     StartRequest();
