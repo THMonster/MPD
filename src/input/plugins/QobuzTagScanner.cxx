@@ -40,23 +40,29 @@ static constexpr yajl_callbacks parse_callbacks = {
 };
 
 class QobuzTagScanner::ResponseParser final : public YajlResponseParser {
-	enum class State {
-		NONE,
-		COMPOSER,
-		COMPOSER_NAME,
-		DURATION,
-		TITLE,
-		ALBUM,
-		ALBUM_TITLE,
-		ALBUM_ARTIST,
-		ALBUM_ARTIST_NAME,
-		PERFORMER,
-		PERFORMER_NAME,
-	} state = State::NONE;
+  enum class State {
+    NONE,
+    COMPOSER,
+    COMPOSER_NAME,
+    DURATION,
+    TITLE,
+    ALBUM,
+    ALBUM_TITLE,
+    ALBUM_ARTIST,
+    ALBUM_ARTIST_NAME,
+    PERFORMER,
+    PERFORMER_NAME,
+    WORK,
+  } state = State::NONE;
 
-	unsigned map_depth = 0;
+  unsigned map_depth = 0;
 
-	TagBuilder tag;
+  TagBuilder tag;
+
+  std::string track_work;
+  std::string track_title;
+  std::string track_performer;
+  std::string track_composer;
 
 public:
 	explicit ResponseParser() noexcept
@@ -72,6 +78,8 @@ public:
 	bool StartMap() noexcept;
 	bool MapKey(StringView value) noexcept;
 	bool EndMap() noexcept;
+
+  void merge_title();
 };
 
 static std::string
@@ -117,6 +125,7 @@ QobuzTagScanner::FinishParser(std::unique_ptr<CurlResponseParser> p)
 {
 	assert(dynamic_cast<ResponseParser *>(p.get()) != nullptr);
 	auto &rp = (ResponseParser &)*p;
+  rp.merge_title();
 	handler.OnRemoteTag(rp.GetTag());
 }
 
@@ -145,33 +154,45 @@ QobuzTagScanner::ResponseParser::Integer(long long value) noexcept
 inline bool
 QobuzTagScanner::ResponseParser::String(StringView value) noexcept
 {
-	switch (state) {
-	case State::TITLE:
-		if (map_depth == 1)
-			tag.AddItem(TAG_TITLE, value);
-		break;
+  switch (state) {
+  case State::TITLE:
+    if (map_depth == 1)
+      this->track_title = std::string(value.data, value.size);
+    break;
 
-	case State::COMPOSER_NAME:
-		if (map_depth == 2)
-			tag.AddItem(TAG_COMPOSER, value);
-		break;
+  case State::COMPOSER_NAME:
+    if (map_depth == 2) {
+      tag.AddItem(TAG_COMPOSER, value);
+      this->track_composer = std::string(value.data, value.size);
+    }
+    break;
 
-	case State::ALBUM_TITLE:
-		if (map_depth == 2)
-			tag.AddItem(TAG_ALBUM, value);
-		break;
+  case State::ALBUM_TITLE:
+    if (map_depth == 2)
+      tag.AddItem(TAG_ALBUM, value);
+    break;
 
-	case State::ALBUM_ARTIST_NAME:
-		if (map_depth == 3)
-			tag.AddItem(TAG_ALBUM_ARTIST, value);
-		break;
+  case State::ALBUM_ARTIST_NAME:
+    if (map_depth == 3) {
+      tag.AddItem(TAG_ALBUM_ARTIST, value);
+    }
+    break;
 
-	case State::PERFORMER_NAME:
-		if (map_depth == 2)
-			tag.AddItem(TAG_PERFORMER, value);
-		break;
+  case State::PERFORMER_NAME:
+    if (map_depth == 2) {
+      tag.AddItem(TAG_PERFORMER, value);
+      this->track_performer = std::string(value.data, value.size);
+    }
+    break;
 
-	default:
+  case State::WORK:
+    if (map_depth == 1) {
+      this->track_work = std::string(value.data, value.size);
+      // std::cout << value.data << std::endl;
+    }
+    break;
+
+  default:
 		break;
 	}
 
@@ -200,7 +221,9 @@ QobuzTagScanner::ResponseParser::MapKey(StringView value) noexcept
 			state = State::ALBUM;
 		else if (value.Equals("performer"))
 			state = State::PERFORMER;
-		else
+    else if (value.Equals("work"))
+      state = State::WORK;
+    else
 			state = State::NONE;
 		break;
 
@@ -288,4 +311,20 @@ QobuzTagScanner::ResponseParser::EndMap() noexcept
 	--map_depth;
 
 	return true;
+}
+
+inline void QobuzTagScanner::ResponseParser::merge_title()
+{
+  if (this->track_work.empty()) {
+    tag.AddItem(TAG_TITLE, StringView(track_title.c_str(), track_title.size()));
+  } else {
+    track_title = track_work + ": " + track_title;
+    tag.AddItem(TAG_TITLE, StringView(track_title.c_str(), track_title.size()));
+  }
+  if (!this->track_performer.empty() && this->track_composer.empty()) {
+    tag.AddItem(TAG_ARTIST, StringView(track_performer.c_str(), track_performer.size()));
+  } else if (!this->track_performer.empty() && !this->track_composer.empty()) {
+    track_performer = track_performer + ", " + track_composer;
+    tag.AddItem(TAG_ARTIST, StringView(track_performer.c_str(), track_performer.size()));
+  }
 }
