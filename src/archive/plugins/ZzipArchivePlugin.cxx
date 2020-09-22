@@ -32,6 +32,8 @@
 
 #include <zzip/zzip.h>
 
+#include <inttypes.h> /* for PRIoffset (PRIu64) */
+
 struct ZzipDir {
 	ZZIP_DIR *const dir;
 
@@ -54,10 +56,11 @@ class ZzipArchiveFile final : public ArchiveFile {
 	std::shared_ptr<ZzipDir> dir;
 
 public:
-	ZzipArchiveFile(std::shared_ptr<ZzipDir> &&_dir)
-		:dir(std::move(_dir)) {}
+	template<typename D>
+	explicit ZzipArchiveFile(D &&_dir) noexcept
+		:dir(std::forward<D>(_dir)) {}
 
-	virtual void Visit(ArchiveVisitor &visitor) override;
+	void Visit(ArchiveVisitor &visitor) override;
 
 	InputStreamPtr OpenStream(const char *path,
 				  Mutex &mutex) override;
@@ -91,11 +94,12 @@ class ZzipInputStream final : public InputStream {
 	ZZIP_FILE *const file;
 
 public:
-	ZzipInputStream(const std::shared_ptr<ZzipDir> _dir, const char *_uri,
+	template<typename D>
+	ZzipInputStream(D &&_dir, const char *_uri,
 			Mutex &_mutex,
 			ZZIP_FILE *_file)
 		:InputStream(_uri, _mutex),
-		 dir(_dir), file(_file) {
+		 dir(std::forward<D>(_dir)), file(_file) {
 		//we are seekable (but its not recommendent to do so)
 		seekable = true;
 
@@ -106,7 +110,7 @@ public:
 		SetReady();
 	}
 
-	~ZzipInputStream() {
+	~ZzipInputStream() noexcept override {
 		zzip_file_close(file);
 	}
 
@@ -145,12 +149,17 @@ ZzipInputStream::Read(void *ptr, size_t read_size)
 {
 	const ScopeUnlock unlock(mutex);
 
-	int ret = zzip_file_read(file, ptr, read_size);
-	if (ret < 0)
+	zzip_ssize_t nbytes = zzip_file_read(file, ptr, read_size);
+	if (nbytes < 0)
 		throw std::runtime_error("zzip_file_read() has failed");
 
+	if (nbytes == 0 && !IsEOF())
+		throw FormatRuntimeError("Unexpected end of file %s"
+					 " at %" PRIoffset " of %" PRIoffset,
+					 GetURI(), GetOffset(), GetSize());
+
 	offset = zzip_tell(file);
-	return ret;
+	return nbytes;
 }
 
 bool

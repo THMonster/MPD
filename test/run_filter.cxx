@@ -27,6 +27,8 @@
 #include "filter/Prepared.hxx"
 #include "pcm/Volume.hxx"
 #include "mixer/MixerControl.hxx"
+#include "system/Error.hxx"
+#include "system/FileDescriptor.hxx"
 #include "util/ConstBuffer.hxx"
 #include "util/StringBuffer.hxx"
 #include "util/RuntimeError.hxx"
@@ -39,8 +41,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <errno.h>
-#include <unistd.h>
 
 void
 mixer_set_volume(gcc_unused Mixer *mixer,
@@ -53,17 +53,44 @@ LoadFilter(const ConfigData &config, const char *name)
 {
 	const auto *param = config.FindBlock(ConfigBlockOption::AUDIO_FILTER,
 					     "name", name);
-	if (param == NULL)
+	if (param == nullptr)
 		throw FormatRuntimeError("No such configured filter: %s",
 					 name);
 
 	return filter_configured_new(*param);
 }
 
+static size_t
+ReadOrThrow(FileDescriptor fd, void *buffer, size_t size)
+{
+	auto nbytes = fd.Read(buffer, size);
+	if (nbytes < 0)
+		throw MakeErrno("Read failed");
+
+	return nbytes;
+}
+
+static size_t
+ReadFrames(FileDescriptor fd, void *_buffer, size_t size, size_t frame_size)
+{
+	auto buffer = (uint8_t *)_buffer;
+
+	size = (size / frame_size) * frame_size;
+
+	size_t nbytes = ReadOrThrow(fd, buffer, size);
+
+	const size_t modulo = nbytes % frame_size;
+	if (modulo > 0) {
+		size_t rest = frame_size - modulo;
+		fd.FullRead(buffer + nbytes, rest);
+		nbytes += rest;
+	}
+
+	return nbytes;
+}
+
 int main(int argc, char **argv)
 try {
-	char buffer[4096];
-
 	if (argc < 3 || argc > 4) {
 		fprintf(stderr, "Usage: run_filter CONFIG NAME [FORMAT] <IN\n");
 		return EXIT_FAILURE;
@@ -82,6 +109,8 @@ try {
 	if (argc > 3)
 		audio_format = ParseAudioFormat(argv[3], false);
 
+	const size_t in_frame_size = audio_format.GetFrameSize();
+
 	/* initialize the filter */
 
 	auto prepared_filter = LoadFilter(config, argv[2]);
@@ -97,21 +126,26 @@ try {
 
 	/* play */
 
-	while (true) {
-		ssize_t nbytes;
+	FileDescriptor input_fd(STDIN_FILENO);
+	FileDescriptor output_fd(STDOUT_FILENO);
 
-		nbytes = read(0, buffer, sizeof(buffer));
-		if (nbytes <= 0)
+	while (true) {
+		char buffer[4096];
+
+		ssize_t nbytes = ReadFrames(input_fd, buffer, sizeof(buffer),
+					    in_frame_size);
+		if (nbytes == 0)
 			break;
 
 		auto dest = filter->FilterPCM({(const void *)buffer, (size_t)nbytes});
+		output_fd.FullWrite(dest.data, dest.size);
+	}
 
-		nbytes = write(1, dest.data, dest.size);
-		if (nbytes < 0) {
-			fprintf(stderr, "Failed to write: %s\n",
-				strerror(errno));
-			return 1;
-		}
+	while (true) {
+		auto dest = filter->Flush();
+		if (dest.IsNull())
+			break;
+		output_fd.FullWrite(dest.data, dest.size);
 	}
 
 	/* cleanup and exit */

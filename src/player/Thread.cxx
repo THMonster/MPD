@@ -440,7 +440,7 @@ Player::ActivateDecoder() noexcept
 	pc.audio_format.Clear();
 
 	{
-		/* call syncPlaylistWithQueue() in the main thread */
+		/* call playlist::SyncWithPlayer() in the main thread */
 		const ScopeUnlock unlock(pc.mutex);
 		pc.listener.OnPlayerSync();
 	}
@@ -680,6 +680,12 @@ Player::SeekDecoder() noexcept
 
 	/* re-fill the buffer after seeking */
 	buffering = true;
+
+	{
+		/* call syncPlaylistWithQueue() in the main thread */
+		const ScopeUnlock unlock(pc.mutex);
+		pc.listener.OnPlayerSync();
+	}
 
 	return true;
 }
@@ -1169,6 +1175,11 @@ try {
 			{
 				const ScopeUnlock unlock(mutex);
 				do_play(*this, dc, buffer);
+
+				/* give the main thread a chance to
+				   queue another song, just in case
+				   we've stopped playback
+				   spuriously */
 				listener.OnPlayerSync();
 			}
 

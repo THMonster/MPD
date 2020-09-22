@@ -58,9 +58,9 @@ public:
 class Bzip2InputStream final : public InputStream {
 	std::shared_ptr<InputStream> input;
 
-	bool eof = false;
+	bz_stream bzstream{};
 
-	bz_stream bzstream;
+	bool eof = false;
 
 	char buffer[5000];
 
@@ -68,7 +68,7 @@ public:
 	Bzip2InputStream(const std::shared_ptr<InputStream> &_input,
 			 const char *uri,
 			 Mutex &mutex);
-	~Bzip2InputStream();
+	~Bzip2InputStream() noexcept override;
 
 	/* virtual methods from InputStream */
 	bool IsEOF() noexcept override;
@@ -78,25 +78,6 @@ private:
 	void Open();
 	bool FillBuffer();
 };
-
-/* single archive handling allocation helpers */
-
-inline void
-Bzip2InputStream::Open()
-{
-	bzstream.bzalloc = nullptr;
-	bzstream.bzfree = nullptr;
-	bzstream.opaque = nullptr;
-
-	bzstream.next_in = (char *)buffer;
-	bzstream.avail_in = 0;
-
-	int ret = BZ2_bzDecompressInit(&bzstream, 0, 0);
-	if (ret != BZ_OK)
-		throw std::runtime_error("BZ2_bzDecompressInit() has failed");
-
-	SetReady();
-}
 
 /* archive open && listing routine */
 
@@ -116,10 +97,16 @@ Bzip2InputStream::Bzip2InputStream(const std::shared_ptr<InputStream> &_input,
 	:InputStream(_uri, _mutex),
 	 input(_input)
 {
-	Open();
+	bzstream.next_in = (char *)buffer;
+
+	int ret = BZ2_bzDecompressInit(&bzstream, 0, 0);
+	if (ret != BZ_OK)
+		throw std::runtime_error("BZ2_bzDecompressInit() has failed");
+
+	SetReady();
 }
 
-Bzip2InputStream::~Bzip2InputStream()
+Bzip2InputStream::~Bzip2InputStream() noexcept
 {
 	BZ2_bzDecompressEnd(&bzstream);
 }
@@ -149,22 +136,18 @@ Bzip2InputStream::FillBuffer()
 size_t
 Bzip2InputStream::Read(void *ptr, size_t length)
 {
-	const ScopeUnlock unlock(mutex);
-
-	int bz_result;
-	size_t nbytes = 0;
-
 	if (eof)
 		return 0;
+
+	const ScopeUnlock unlock(mutex);
 
 	bzstream.next_out = (char *)ptr;
 	bzstream.avail_out = length;
 
 	do {
-		if (!FillBuffer())
-			return 0;
+		const bool had_input = FillBuffer();
 
-		bz_result = BZ2_bzDecompress(&bzstream);
+		const int bz_result = BZ2_bzDecompress(&bzstream);
 
 		if (bz_result == BZ_STREAM_END) {
 			eof = true;
@@ -173,9 +156,12 @@ Bzip2InputStream::Read(void *ptr, size_t length)
 
 		if (bz_result != BZ_OK)
 			throw std::runtime_error("BZ2_bzDecompress() has failed");
+
+		if (!had_input && bzstream.avail_out == length)
+			throw std::runtime_error("Unexpected end of bzip2 file");
 	} while (bzstream.avail_out == length);
 
-	nbytes = length - bzstream.avail_out;
+	const size_t nbytes = length - bzstream.avail_out;
 	offset += nbytes;
 
 	return nbytes;

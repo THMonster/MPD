@@ -24,11 +24,11 @@
 #include "system/Error.hxx"
 #include "Log.hxx"
 
+#include <cerrno>
+#include <climits>
+#include <cstdint>
+
 #include <sys/inotify.h>
-#include <unistd.h>
-#include <errno.h>
-#include <stdint.h>
-#include <limits.h>
 
 bool
 InotifySource::OnSocketReady(gcc_unused unsigned flags) noexcept
@@ -48,7 +48,7 @@ InotifySource::OnSocketReady(gcc_unused unsigned flags) noexcept
 
 	while (true) {
 		const size_t remaining = end - p;
-		const struct inotify_event *event =
+		const auto *event =
 			(const struct inotify_event *)p;
 		if (remaining < sizeof(*event) ||
 		    remaining < sizeof(*event) + event->len)
@@ -98,7 +98,7 @@ InotifySource::Add(const char *path_fs, unsigned mask)
 }
 
 void
-InotifySource::Remove(unsigned wd)
+InotifySource::Remove(unsigned wd) noexcept
 {
 	auto ifd = GetSocket().ToFileDescriptor();
 	int ret = inotify_rm_watch(ifd.Get(), wd);
