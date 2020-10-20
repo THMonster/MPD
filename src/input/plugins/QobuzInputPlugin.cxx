@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -27,13 +27,12 @@
 #include "config/Block.hxx"
 #include "input/FailingInputStream.hxx"
 #include "input/InputPlugin.hxx"
-#include "input/ProxyInputStream.hxx"
-#include "lib/gcrypt/Init.hxx"
+#include "config/Block.hxx"
+#include "lib/crypto/MD5.hxx"
 #include "thread/Mutex.hxx"
 #include "util/Domain.hxx"
 #include "util/StringCompare.hxx"
 
-#include <stdexcept>
 #include <memory>
 
 #include <time.h>
@@ -60,7 +59,7 @@ public:
 		qobuz_client->AddLoginHandler(*this);
 	}
 
-	~QobuzInputStream() {
+	~QobuzInputStream() override {
 		qobuz_client->RemoveLoginHandler(*this);
 	}
 
@@ -72,7 +71,7 @@ public:
 	}
 
 private:
-	void Failed(std::exception_ptr e) {
+	void Failed(const std::exception_ptr& e) {
 		SetInput(std::make_unique<FailingInputStream>(GetURI(), e,
 							      mutex));
 	}
@@ -133,7 +132,7 @@ QobuzInputStream::OnQobuzTrackError(std::exception_ptr e) noexcept
 static void
 InitQobuzInput(EventLoop &event_loop, const ConfigBlock &block)
 {
-	Gcrypt::Init();
+	GlobalInitMD5();
 
 	const char *base_url = block.GetBlockValue("base_url",
 						   "http://www.qobuz.com/api.json/0.2/");
@@ -168,7 +167,7 @@ InitQobuzInput(EventLoop &event_loop, const ConfigBlock &block)
 }
 
 static void
-FinishQobuzInput()
+FinishQobuzInput() noexcept
 {
 	delete qobuz_client;
 }
@@ -226,5 +225,6 @@ const InputPlugin qobuz_input_plugin = {
 	InitQobuzInput,
 	FinishQobuzInput,
 	OpenQobuzInput,
+	nullptr,
 	ScanQobuzTags,
 };

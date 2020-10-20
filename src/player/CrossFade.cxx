@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,13 +20,13 @@
 #include "CrossFade.hxx"
 #include "Chrono.hxx"
 #include "MusicChunk.hxx"
-#include "AudioFormat.hxx"
+#include "pcm/AudioFormat.hxx"
 #include "util/NumberParser.hxx"
 #include "util/Domain.hxx"
 #include "util/Math.hxx"
 #include "Log.hxx"
 
-#include <assert.h>
+#include <cassert>
 
 static constexpr Domain cross_fade_domain("cross_fade");
 
@@ -43,7 +43,7 @@ mixramp_interpolate(const char *ramp_list, float required_db) noexcept
 	 * between the dB and seconds of a pair.
 	 * The dB values must be monotonically increasing for this to work. */
 
-	while (1) {
+	while (true) {
 		/* Parse the dB value. */
 		char *endptr;
 		const float db = ParseFloat(ramp_list, &endptr);

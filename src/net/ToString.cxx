@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2017 Max Kellermann <max.kellermann@gmail.com>
+ * Copyright 2011-2019 Max Kellermann <max.kellermann@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,8 +31,11 @@
 #include "ToString.hxx"
 #include "Features.hxx"
 #include "SocketAddress.hxx"
+#include "IPv4Address.hxx"
 
 #include <algorithm>
+#include <cassert>
+#include <cstring>
 
 #ifdef _WIN32
 #include <ws2tcpip.h>
@@ -47,15 +50,12 @@
 #include <sys/un.h>
 #endif
 
-#include <assert.h>
-#include <string.h>
-
 #ifdef HAVE_UN
 
 static std::string
 LocalAddressToString(const struct sockaddr_un &s_un, size_t size) noexcept
 {
-	const size_t prefix_size = (size_t)
+	const auto prefix_size = (size_t)
 		((struct sockaddr_un *)nullptr)->sun_path;
 	assert(size >= prefix_size);
 
@@ -79,28 +79,6 @@ LocalAddressToString(const struct sockaddr_un &s_un, size_t size) noexcept
 
 #endif
 
-#if defined(HAVE_IPV6) && defined(IN6_IS_ADDR_V4MAPPED)
-
-/**
- * Convert "::ffff:127.0.0.1" to "127.0.0.1".
- */
-static SocketAddress
-UnmapV4(SocketAddress src, struct sockaddr_in &buffer) noexcept
-{
-	assert(src.IsV4Mapped());
-
-	const auto &src6 = *(const struct sockaddr_in6 *)src.GetAddress();
-	memset(&buffer, 0, sizeof(buffer));
-	buffer.sin_family = AF_INET;
-	memcpy(&buffer.sin_addr, ((const char *)&src6.sin6_addr) + 12,
-	       sizeof(buffer.sin_addr));
-	buffer.sin_port = src6.sin6_port;
-
-	return { (const struct sockaddr *)&buffer, sizeof(buffer) };
-}
-
-#endif
-
 std::string
 ToString(SocketAddress address) noexcept
 {
@@ -112,9 +90,9 @@ ToString(SocketAddress address) noexcept
 #endif
 
 #if defined(HAVE_IPV6) && defined(IN6_IS_ADDR_V4MAPPED)
-	struct sockaddr_in in_buffer;
+	IPv4Address ipv4_buffer;
 	if (address.IsV4Mapped())
-		address = UnmapV4(address, in_buffer);
+		address = ipv4_buffer = address.UnmapV4();
 #endif
 
 	char host[NI_MAXHOST], serv[NI_MAXSERV];
@@ -125,7 +103,7 @@ ToString(SocketAddress address) noexcept
 		return "unknown";
 
 #ifdef HAVE_IPV6
-	if (strchr(host, ':') != nullptr) {
+	if (std::strchr(host, ':') != nullptr) {
 		std::string result("[");
 		result.append(host);
 		result.append("]:");

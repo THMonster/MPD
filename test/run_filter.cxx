@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2019 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,31 +20,31 @@
 #include "ConfigGlue.hxx"
 #include "fs/Path.hxx"
 #include "fs/NarrowPath.hxx"
-#include "AudioParser.hxx"
-#include "AudioFormat.hxx"
 #include "filter/LoadOne.hxx"
 #include "filter/Filter.hxx"
 #include "filter/Prepared.hxx"
+#include "pcm/AudioParser.hxx"
+#include "pcm/AudioFormat.hxx"
 #include "pcm/Volume.hxx"
 #include "mixer/MixerControl.hxx"
 #include "system/Error.hxx"
-#include "system/FileDescriptor.hxx"
+#include "io/FileDescriptor.hxx"
 #include "util/ConstBuffer.hxx"
 #include "util/StringBuffer.hxx"
 #include "util/RuntimeError.hxx"
 #include "util/PrintException.hxx"
 
+#include <cassert>
 #include <memory>
 #include <stdexcept>
 
-#include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 
 void
-mixer_set_volume(gcc_unused Mixer *mixer,
-		 gcc_unused unsigned volume)
+mixer_set_volume([[maybe_unused]] Mixer *mixer,
+		 [[maybe_unused]] unsigned volume)
 {
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,16 +19,13 @@
 
 #include "AutoConvertFilterPlugin.hxx"
 #include "ConvertFilterPlugin.hxx"
-#include "filter/FilterPlugin.hxx"
 #include "filter/Filter.hxx"
 #include "filter/Prepared.hxx"
-#include "filter/FilterRegistry.hxx"
-#include "AudioFormat.hxx"
+#include "pcm/AudioFormat.hxx"
 #include "util/ConstBuffer.hxx"
 
+#include <cassert>
 #include <memory>
-
-#include <assert.h>
 
 class AutoConvertFilter final : public Filter {
 	/**
@@ -66,7 +63,7 @@ class PreparedAutoConvertFilter final : public PreparedFilter {
 	std::unique_ptr<PreparedFilter> filter;
 
 public:
-	PreparedAutoConvertFilter(std::unique_ptr<PreparedFilter> _filter) noexcept
+	explicit PreparedAutoConvertFilter(std::unique_ptr<PreparedFilter> _filter) noexcept
 		:filter(std::move(_filter)) {}
 
 	std::unique_ptr<Filter> Open(AudioFormat &af) override;

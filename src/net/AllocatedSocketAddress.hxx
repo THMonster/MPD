@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 Max Kellermann <max.kellermann@gmail.com>
+ * Copyright 2012-2020 Max Kellermann <max.kellermann@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,15 +30,16 @@
 #ifndef ALLOCATED_SOCKET_ADDRESS_HXX
 #define ALLOCATED_SOCKET_ADDRESS_HXX
 
-#include "SocketAddress.hxx"
+#include "SocketAddress.hxx" // IWYU pragma: export
 #include "Features.hxx"
 #include "util/Compiler.h"
 
-#include <algorithm>
+#include <utility>
 
 #include <stdlib.h>
 
 struct sockaddr;
+struct StringView;
 
 class AllocatedSocketAddress {
 public:
@@ -79,8 +80,9 @@ public:
 	}
 
 	AllocatedSocketAddress &operator=(AllocatedSocketAddress &&src) noexcept {
-		std::swap(address, src.address);
-		std::swap(size, src.size);
+		using std::swap;
+		swap(address, src.address);
+		swap(size, src.size);
 		return *this;
 	}
 

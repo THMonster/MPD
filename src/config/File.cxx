@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -35,7 +35,7 @@
 #include "fs/io/BufferedReader.hxx"
 #include "Log.hxx"
 
-#include <assert.h>
+#include <cassert>
 
 static constexpr char CONF_COMMENT = '#';
 
@@ -72,7 +72,7 @@ config_read_name_value(ConfigBlock &block, char *input, unsigned line)
 		throw FormatRuntimeError("\"%s\" is duplicate, first defined on line %i",
 					 name, bp->line);
 
-	block.AddBlockParam(name, std::move(value), line);
+	block.AddBlockParam(name, value, line);
 }
 
 static ConfigBlock
@@ -112,7 +112,7 @@ ReadConfigBlock(ConfigData &config_data, BufferedReader &reader,
 		const char *name, ConfigBlockOption o,
 		Tokenizer &tokenizer)
 {
-	const unsigned i = unsigned(o);
+	const auto i = unsigned(o);
 	const ConfigTemplate &option = config_block_templates[i];
 
 	if (option.deprecated)
@@ -144,7 +144,7 @@ ReadConfigParam(ConfigData &config_data, BufferedReader &reader,
 		const char *name, ConfigOption o,
 		Tokenizer &tokenizer)
 {
-	const unsigned i = unsigned(o);
+	const auto i = unsigned(o);
 	const ConfigTemplate &option = config_param_templates[i];
 
 	if (option.deprecated)

@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -27,29 +27,21 @@
 #ifdef HAVE_ICU
 #include "Util.hxx"
 #include "util/AllocatedArray.hxx"
-#include "util/ConstBuffer.hxx"
 
 #include <unicode/ucol.h>
 #include <unicode/ustring.h>
 #else
 #include <algorithm>
-#include <ctype.h>
 #endif
 
 #include <memory>
 
-#include <assert.h>
 #include <string.h>
 
 AllocatedString<>
-IcuCaseFold(const char *src) noexcept
+IcuCaseFold(std::string_view src) noexcept
 try {
 #ifdef HAVE_ICU
-#if !CLANG_CHECK_VERSION(3,6)
-	/* disabled on clang due to -Wtautological-pointer-compare */
-	assert(src != nullptr);
-#endif
-
 	const auto u = UCharFromUTF8(src);
 	if (u.IsNull())
 		return AllocatedString<>::Duplicate(src);

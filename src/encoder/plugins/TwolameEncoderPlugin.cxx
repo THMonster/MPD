@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,8 +19,7 @@
 
 #include "TwolameEncoderPlugin.hxx"
 #include "../EncoderAPI.hxx"
-#include "AudioFormat.hxx"
-#include "config/Domain.hxx"
+#include "pcm/AudioFormat.hxx"
 #include "util/NumberParser.hxx"
 #include "util/RuntimeError.hxx"
 #include "util/Domain.hxx"
@@ -28,9 +27,9 @@
 
 #include <twolame.h>
 
+#include <cassert>
 #include <stdexcept>
 
-#include <assert.h>
 #include <string.h>
 
 class TwolameEncoder final : public Encoder {
@@ -53,7 +52,7 @@ public:
 		       twolame_options *_options)
 		:Encoder(false),
 		 audio_format(_audio_format), options(_options) {}
-	~TwolameEncoder() override;
+	~TwolameEncoder() noexcept override;
 
 	/* virtual methods from class Encoder */
 
@@ -66,7 +65,7 @@ public:
 	}
 
 	void Write(const void *data, size_t length) override;
-	size_t Read(void *dest, size_t length) override;
+	size_t Read(void *dest, size_t length) noexcept override;
 };
 
 class PreparedTwolameEncoder final : public PreparedEncoder {
@@ -74,12 +73,12 @@ class PreparedTwolameEncoder final : public PreparedEncoder {
 	int bitrate;
 
 public:
-	PreparedTwolameEncoder(const ConfigBlock &block);
+	explicit PreparedTwolameEncoder(const ConfigBlock &block);
 
 	/* virtual methods from class PreparedEncoder */
 	Encoder *Open(AudioFormat &audio_format) override;
 
-	const char *GetMimeType() const override {
+	[[nodiscard]] const char *GetMimeType() const noexcept override {
 		return  "audio/mpeg";
 	}
 };
@@ -179,7 +178,7 @@ PreparedTwolameEncoder::Open(AudioFormat &audio_format)
 	return new TwolameEncoder(audio_format, options);
 }
 
-TwolameEncoder::~TwolameEncoder()
+TwolameEncoder::~TwolameEncoder() noexcept
 {
 	twolame_close(&options);
 }
@@ -187,7 +186,7 @@ TwolameEncoder::~TwolameEncoder()
 void
 TwolameEncoder::Write(const void *data, size_t length)
 {
-	const int16_t *src = (const int16_t*)data;
+	const auto *src = (const int16_t*)data;
 
 	assert(output_buffer_position == output_buffer_length);
 
@@ -205,7 +204,7 @@ TwolameEncoder::Write(const void *data, size_t length)
 }
 
 size_t
-TwolameEncoder::Read(void *dest, size_t length)
+TwolameEncoder::Read(void *dest, size_t length) noexcept
 {
 	assert(output_buffer_position <= output_buffer_length);
 

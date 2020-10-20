@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2019 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -155,7 +155,7 @@ tag_save(FILE *file, const Tag &tag)
 static int
 dump_input_stream(InputStream &is, FileDescriptor out, size_t chunk_size)
 {
-	const std::lock_guard<Mutex> protect(is.mutex);
+	std::unique_lock<Mutex> lock(is.mutex);
 
 	/* print meta data */
 
@@ -175,7 +175,7 @@ dump_input_stream(InputStream &is, FileDescriptor out, size_t chunk_size)
 
 		char buffer[MAX_CHUNK_SIZE];
 		assert(chunk_size <= sizeof(buffer));
-		size_t num_read = is.Read(buffer, chunk_size);
+		size_t num_read = is.Read(lock, buffer, chunk_size);
 		if (num_read == 0)
 			break;
 
@@ -198,9 +198,8 @@ class DumpRemoteTagHandler final : public RemoteTagHandler {
 
 public:
 	Tag Wait() {
-		const std::lock_guard<Mutex> lock(mutex);
-		while (!done)
-			cond.wait(mutex);
+		std::unique_lock<Mutex> lock(mutex);
+		cond.wait(lock, [this]{ return done; });
 
 		if (error)
 			std::rethrow_exception(error);
@@ -213,14 +212,14 @@ public:
 		const std::lock_guard<Mutex> lock(mutex);
 		tag = std::move(_tag);
 		done = true;
-		cond.broadcast();
+		cond.notify_all();
 	}
 
 	void OnRemoteTagError(std::exception_ptr e) noexcept override {
 		const std::lock_guard<Mutex> lock(mutex);
 		error = std::move(e);
 		done = true;
-		cond.broadcast();
+		cond.notify_all();
 	}
 };
 

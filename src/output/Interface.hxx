@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,7 +23,6 @@
 #include <map>
 #include <string>
 #include <chrono>
-#include <stdexcept>
 
 struct AudioFormat;
 struct Tag;
@@ -42,21 +41,21 @@ protected:
 	static constexpr unsigned FLAG_NEED_FULLY_DEFINED_AUDIO_FORMAT = 0x4;
 
 public:
-	explicit AudioOutput(unsigned _flags):flags(_flags) {}
-	virtual ~AudioOutput() = default;
+	explicit AudioOutput(unsigned _flags) noexcept:flags(_flags) {}
+	virtual ~AudioOutput() noexcept = default;
 
 	AudioOutput(const AudioOutput &) = delete;
 	AudioOutput &operator=(const AudioOutput &) = delete;
 
-	bool SupportsEnableDisable() const {
+	bool SupportsEnableDisable() const noexcept {
 		return flags & FLAG_ENABLE_DISABLE;
 	}
 
-	bool SupportsPause() const {
+	bool SupportsPause() const noexcept {
 		return flags & FLAG_PAUSE;
 	}
 
-	bool GetNeedFullyDefinedAudioFormat() const {
+	bool GetNeedFullyDefinedAudioFormat() const noexcept {
 		return flags & FLAG_NEED_FULLY_DEFINED_AUDIO_FORMAT;
 	}
 
@@ -65,7 +64,7 @@ public:
 	 *
 	 * This method must be thread-safe.
 	 */
-	virtual const std::map<std::string, std::string> GetAttributes() const noexcept {
+	virtual std::map<std::string, std::string> GetAttributes() const noexcept {
 		return {};
 	}
 
@@ -80,7 +79,7 @@ public:
 	 * Enable the device.  This may allocate resources, preparing
 	 * for the device to be opened.
 	 *
-	 * Throws #std::runtime_error on error.
+	 * Throws on error.
 	 */
 	virtual void Enable() {}
 
@@ -93,7 +92,7 @@ public:
 	/**
 	 * Really open the device.
 	 *
-	 * Throws #std::runtime_error on error.
+	 * Throws on error.
 	 *
 	 * @param audio_format the audio format in which data is going
 	 * to be delivered; may be modified by the plugin
@@ -128,6 +127,24 @@ public:
 	}
 
 	/**
+	 * Interrupt a blocking operation inside the plugin.  This
+	 * method will be called from outside the output thread (and
+	 * therefore the method must be thread-safe), to make the
+	 * output thread ready for receiving a command.  For example,
+	 * it will be called to prepare for an upcoming Close(),
+	 * Cancel() or Pause() call.
+	 *
+	 * This method can be called any time, even if the output is
+	 * not open or disabled.
+	 *
+	 * Implementations usually send some kind of message/signal to
+	 * the output thread to wake it up and return to the output
+	 * thread loop (e.g. by throwing #AudioOutputInterrupted),
+	 * where the incoming command will be handled and dispatched.
+	 */
+	virtual void Interrupt() noexcept {}
+
+	/**
 	 * Returns a positive number if the output thread shall further
 	 * delay the next call to Play() or Pause(), which will happen
 	 * until this function returns 0.  This should be implemented
@@ -143,6 +160,11 @@ public:
 	/**
 	 * Display metadata for the next chunk.  Optional method,
 	 * because not all devices can display metadata.
+	 *
+	 * Throws on error.
+	 *
+	 * May throw #AudioOutputInterrupted after Interrupt() has
+	 * been called.
 	 */
 	virtual void SendTag(const Tag &) {}
 
@@ -150,7 +172,10 @@ public:
 	 * Play a chunk of audio data.  The method blocks until at
 	 * least one audio frame is consumed.
 	 *
-	 * Throws #std::runtime_error on error.
+	 * Throws on error.
+	 *
+	 * May throw #AudioOutputInterrupted after Interrupt() has
+	 * been called.
 	 *
 	 * @return the number of bytes played (must be a multiple of
 	 * the frame size)
@@ -177,6 +202,9 @@ public:
 	 * silence during pause, so their clients won't be
 	 * disconnected.  Plugins which do not support pausing will
 	 * simply be closed, and have to be reopened when unpaused.
+	 *
+	 * May throw #AudioOutputInterrupted after Interrupt() has
+	 * been called.
 	 *
 	 * @return false on error (output will be closed by caller),
 	 * true for continue to pause

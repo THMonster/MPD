@@ -15,11 +15,16 @@ if compiler.get_id() == 'clang' and compiler.version().version_compare('>=9')
     # work around clang warning caused by GTest's wrong "-lpthread"
     # compiler flag
     '-Wno-unused-command-line-argument',
+
+    # work around "error: 'ScopedTrace' was marked unused but was
+    # used"
+    '-Wno-used-but-marked-unused',
   ]
 endif
 
+gtest_main_dep = dependency('gtest', main: true, fallback: ['gtest', 'gtest_main_dep'])
 gtest_dep = declare_dependency(
-  dependencies: [dependency('gtest', main: true)],
+  dependencies: [gtest_main_dep],
   compile_args: gtest_compile_args,
 )
 
@@ -29,8 +34,6 @@ subdir('time')
 executable(
   'read_conf',
   'read_conf.cxx',
-  '../src/Log.cxx',
-  '../src/LogBackend.cxx',
   include_directories: inc,
   dependencies: [
     config_dep,
@@ -43,6 +46,9 @@ test('TestUtil', executable(
   'TestDivideString.cxx',
   'TestMimeType.cxx',
   'TestSplitString.cxx',
+  'TestUriExtract.cxx',
+  'TestUriQueryParser.cxx',
+  'TestUriRelative.cxx',
   'TestUriUtil.cxx',
   'test_byte_reverse.cxx',
   include_directories: inc,
@@ -65,10 +71,9 @@ test('TestRewindInputStream', executable(
 test('test_mixramp', executable(
   'test_mixramp',
   'test_mixramp.cxx',
-  '../src/Log.cxx',
-  '../src/LogBackend.cxx',
   include_directories: inc,
   dependencies: [
+    log_dep,
     util_dep,
     gtest_dep,
   ],
@@ -98,6 +103,7 @@ test('test_queue_priority', executable(
 test('TestFs', executable(
   'TestFs',
   'TestFs.cxx',
+  'TestLookupFile.cxx',
   include_directories: inc,
   dependencies: [
     fs_dep,
@@ -121,8 +127,6 @@ if libavahi_client_dep.found()
     'run_avahi',
     'run_avahi.cxx',
     'ShutdownHandler.cxx',
-    '../src/Log.cxx',
-    '../src/LogBackend.cxx',
     include_directories: inc,
     dependencies: [
       zeroconf_dep,
@@ -138,8 +142,6 @@ if enable_inotify
     'ShutdownHandler.cxx',
     '../src/db/update/InotifyDomain.cxx',
     '../src/db/update/InotifySource.cxx',
-    '../src/Log.cxx',
-    '../src/LogBackend.cxx',
     include_directories: inc,
     dependencies: [
       event_dep,
@@ -165,8 +167,6 @@ executable(
 executable(
   'WriteFile',
   'WriteFile.cxx',
-  '../src/Log.cxx',
-  '../src/LogBackend.cxx',
   include_directories: inc,
   dependencies: [
     fs_dep,
@@ -176,8 +176,6 @@ executable(
 executable(
   'dump_text_file',
   'dump_text_file.cxx',
-  '../src/Log.cxx',
-  '../src/LogBackend.cxx',
   include_directories: inc,
   dependencies: [
     input_glue_dep,
@@ -198,8 +196,6 @@ if zlib_dep.found()
   executable(
     'run_gunzip',
     'run_gunzip.cxx',
-    '../src/Log.cxx',
-    '../src/LogBackend.cxx',
     include_directories: inc,
     dependencies: [
       fs_dep,
@@ -243,8 +239,6 @@ if neighbor_glue_dep.found()
     'run_neighbor_explorer',
     'run_neighbor_explorer.cxx',
     'ShutdownHandler.cxx',
-    '../src/Log.cxx',
-    '../src/LogBackend.cxx',
     include_directories: inc,
     dependencies: [
       neighbor_glue_dep,
@@ -260,8 +254,6 @@ if enable_database
   executable(
     'run_storage',
     'run_storage.cxx',
-    '../src/Log.cxx',
-    '../src/LogBackend.cxx',
     include_directories: inc,
     dependencies: [
       event_dep,
@@ -273,19 +265,15 @@ if enable_database
     'DumpDatabase',
     'DumpDatabase.cxx',
     '../src/protocol/Ack.cxx',
-    '../src/Log.cxx',
-    '../src/LogBackend.cxx',
     '../src/db/Registry.cxx',
     '../src/db/Selection.cxx',
     '../src/db/PlaylistVector.cxx',
     '../src/db/DatabaseLock.cxx',
-    '../src/AudioFormat.cxx',
-    '../src/AudioParser.cxx',
-    '../src/pcm/SampleFormat.cxx',
     '../src/SongSave.cxx',
     '../src/TagSave.cxx',
     include_directories: inc,
     dependencies: [
+      pcm_basic_dep,
       song_dep,
       fs_dep,
       event_dep,
@@ -299,7 +287,6 @@ if enable_database
     '../src/playlist/PlaylistSong.cxx',
     '../src/SongLoader.cxx',
     '../src/LocateUri.cxx',
-    '../src/Log.cxx',
     include_directories: inc,
     dependencies: [
       tag_dep,
@@ -317,8 +304,6 @@ executable(
   'run_input',
   'run_input.cxx',
   '../src/TagSave.cxx',
-  '../src/Log.cxx',
-  '../src/LogBackend.cxx',
   include_directories: inc,
   dependencies: [
     input_glue_dep,
@@ -331,8 +316,6 @@ if curl_dep.found()
     'RunCurl',
     'RunCurl.cxx',
     'ShutdownHandler.cxx',
-    '../src/Log.cxx',
-    '../src/LogBackend.cxx',
     include_directories: inc,
     dependencies: [
       curl_dep,
@@ -347,10 +330,9 @@ if curl_dep.found()
   test('test_icy_parser', executable(
     'test_icy_parser',
     'test_icy_parser.cxx',
-    '../src/Log.cxx',
-    '../src/LogBackend.cxx',
     include_directories: inc,
     dependencies: [
+      icu_dep,
       tag_dep,
       gtest_dep,
     ],
@@ -362,23 +344,9 @@ endif
 #
 
 if archive_glue_dep.found()
-  test('test_archive', executable(
-    'test_archive',
-    'test_archive.cxx',
-    '../src/Log.cxx',
-    '../src/LogBackend.cxx',
-    include_directories: inc,
-    dependencies: [
-      archive_glue_dep,
-      gtest_dep,
-    ],
-  ))
-
   executable(
     'visit_archive',
     'visit_archive.cxx',
-    '../src/Log.cxx',
-    '../src/LogBackend.cxx',
     include_directories: inc,
     dependencies: [
       archive_glue_dep,
@@ -413,8 +381,6 @@ executable(
   'dump_playlist.cxx',
   '../src/TagSave.cxx',
   '../src/TagFile.cxx',
-  '../src/Log.cxx',
-  '../src/LogBackend.cxx',
   include_directories: inc,
   dependencies: [
     playlist_glue_dep,
@@ -432,8 +398,7 @@ if chromaprint_dep.found()
   executable(
     'RunChromaprint',
     'RunChromaprint.cxx',
-    '../src/Log.cxx',
-    '../src/LogBackend.cxx',
+    '../src/lib/chromaprint/DecoderClient.cxx',
     include_directories: inc,
     dependencies: [
       decoder_glue_dep,
@@ -452,8 +417,6 @@ executable(
   'run_decoder',
   'run_decoder.cxx',
   'DumpDecoderClient.cxx',
-  '../src/Log.cxx',
-  '../src/LogBackend.cxx',
   include_directories: inc,
   dependencies: [
     decoder_glue_dep,
@@ -465,8 +428,6 @@ executable(
 executable(
   'read_tags',
   'read_tags.cxx',
-  '../src/Log.cxx',
-  '../src/LogBackend.cxx',
   include_directories: inc,
   dependencies: [
     decoder_glue_dep,
@@ -480,8 +441,6 @@ executable(
   'ContainerScan.cxx',
   '../src/SongSave.cxx',
   '../src/TagSave.cxx',
-  '../src/Log.cxx',
-  '../src/LogBackend.cxx',
   include_directories: inc,
   dependencies: [
     decoder_glue_dep,
@@ -493,8 +452,6 @@ executable(
 executable(
   'ReadApeTags',
   'ReadApeTags.cxx',
-  '../src/Log.cxx',
-  '../src/LogBackend.cxx',
   include_directories: inc,
   dependencies: [
     tag_dep,
@@ -507,8 +464,6 @@ if libid3tag_dep.found()
   executable(
     'dump_rva2',
     'dump_rva2.cxx',
-    '../src/Log.cxx',
-    '../src/LogBackend.cxx',
     include_directories: inc,
     dependencies: [
       tag_dep,
@@ -543,8 +498,6 @@ test('test_pcm', executable(
 executable(
   'run_filter',
   'run_filter.cxx',
-  '../src/Log.cxx',
-  '../src/LogBackend.cxx',
   include_directories: inc,
   dependencies: [
     filter_glue_dep,
@@ -573,8 +526,6 @@ executable(
 executable(
   'run_convert',
   'run_convert.cxx',
-  '../src/Log.cxx',
-  '../src/LogBackend.cxx',
   include_directories: inc,
   dependencies: [
     pcm_dep,
@@ -590,9 +541,6 @@ if encoder_glue_dep.found()
   executable(
     'run_encoder',
     'run_encoder.cxx',
-    '../src/AudioParser.cxx',
-    '../src/Log.cxx',
-    '../src/LogBackend.cxx',
     include_directories: inc,
     dependencies: [
       encoder_glue_dep,
@@ -602,8 +550,6 @@ if encoder_glue_dep.found()
   executable(
     'test_vorbis_encoder',
     'test_vorbis_encoder.cxx',
-    '../src/Log.cxx',
-    '../src/LogBackend.cxx',
     include_directories: inc,
     dependencies: [
       encoder_glue_dep,
@@ -618,8 +564,6 @@ endif
 executable(
   'run_output',
   'run_output.cxx',
-  '../src/Log.cxx',
-  '../src/LogBackend.cxx',
   include_directories: inc,
   dependencies: [
     output_glue_dep,
@@ -638,8 +582,6 @@ if alsa_dep.found()
   executable(
     'read_mixer',
     'read_mixer.cxx',
-    '../src/Log.cxx',
-    '../src/LogBackend.cxx',
     include_directories: inc,
     dependencies: [
       mixer_glue_dep,

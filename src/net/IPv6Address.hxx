@@ -34,7 +34,7 @@
 #include "util/ByteOrder.hxx"
 #include "util/Compiler.h"
 
-#include <stdint.h>
+#include <cstdint>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -42,6 +42,8 @@
 #else
 #include <netinet/in.h>
 #endif
+
+class IPv4Address;
 
 /**
  * An OO wrapper for struct sockaddr_in.
@@ -176,12 +178,18 @@ public:
 	/**
 	 * Is this an IPv4 address mapped inside struct sockaddr_in6?
 	 */
-#if defined(__linux__) && !GCC_OLDER_THAN(5,0)
+#if defined(__linux__)
 	constexpr
 #endif
 	bool IsV4Mapped() const noexcept {
 		return IN6_IS_ADDR_V4MAPPED(&address.sin6_addr);
 	}
+
+	/**
+	 * Convert "::ffff:127.0.0.1" to "127.0.0.1".
+	 */
+	gcc_pure
+	IPv4Address UnmapV4() const noexcept;
 
 	/**
 	 * Bit-wise AND of two addresses.  This is useful for netmask

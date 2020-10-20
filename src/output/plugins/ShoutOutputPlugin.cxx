@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -30,11 +30,10 @@
 
 #include <shout/shout.h>
 
-#include <stdexcept>
+#include <cassert>
 #include <memory>
+#include <stdexcept>
 
-#include <assert.h>
-#include <stdlib.h>
 #include <stdio.h>
 
 static constexpr unsigned DEFAULT_CONN_TIMEOUT = 2;
@@ -50,7 +49,7 @@ struct ShoutOutput final : AudioOutput {
 	uint8_t buffer[32768];
 
 	explicit ShoutOutput(const ConfigBlock &block);
-	~ShoutOutput();
+	~ShoutOutput() override;
 
 	static AudioOutput *Create(EventLoop &event_loop,
 				   const ConfigBlock &block);
@@ -58,7 +57,7 @@ struct ShoutOutput final : AudioOutput {
 	void Open(AudioFormat &audio_format) override;
 	void Close() noexcept override;
 
-	std::chrono::steady_clock::duration Delay() const noexcept override;
+	[[nodiscard]] std::chrono::steady_clock::duration Delay() const noexcept override;
 	void SendTag(const Tag &tag) override;
 	size_t Play(const void *chunk, size_t size) override;
 	void Cancel() noexcept override;

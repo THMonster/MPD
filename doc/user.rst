@@ -44,7 +44,9 @@ ALSA is not available on Android; only the :ref:`OpenSL ES
 Compiling from source
 ---------------------
 
-Download the source tarball from the `MPD home page <https://musicpd.org>`_ and unpack it:
+`Download the source tarball <https://www.musicpd.org/download.html>`_
+and unpack it (or `clone the git repository
+<https://github.com/MusicPlayerDaemon/MPD>`_):
 
 .. code-block:: none
 
@@ -53,7 +55,7 @@ Download the source tarball from the `MPD home page <https://musicpd.org>`_ and 
 
 In any case, you need:
 
-* a C++14 compiler (e.g. gcc 6.0 or clang 3.9)
+* a C++17 compiler (e.g. GCC 8 or clang 5)
 * `Meson 0.49.0 <http://mesonbuild.com/>`__ and `Ninja
   <https://ninja-build.org/>`__
 * Boost 1.58
@@ -185,47 +187,6 @@ ABI is the Android ABI to be built, e.g. ":code:`arm64-v8a`".
 
 This downloads various library sources, and then configures and builds :program:`MPD`. 
 
-systemd socket activation
--------------------------
-
-Using systemd, you can launch :program:`MPD` on demand when the first client attempts to connect.
-
-:program:`MPD` comes with two systemd unit files: a "service" unit and
-a "socket" unit.  These will be installed to the directory specified
-with :code:`-Dsystemd_system_unit_dir=...`,
-e.g. :file:`/lib/systemd/system`.
-
-To enable socket activation, type:
-
-.. code-block:: none
-
-    systemctl enable mpd.socket
-    systemctl start mpd.socket
-
-In this configuration, :program:`MPD` will ignore the :ref:`listener
-settings <listeners>` (``bind_to_address`` and ``port``).
-
-systemd user unit
------------------
-
-You can launch :program:`MPD` as a systemd user unit.  These will be
-installed to the directory specified with
-:code:`-Dsystemd_user_unit_dir=...`,
-e.g. :file:`/usr/lib/systemd/user` or
-:file:`$HOME/.local/share/systemd/user`.
-
-Once the user unit is installed, you can start and stop :program:`MPD` like any other service:
-
-.. code-block:: none
-
-    systemctl --user start mpd
-
-To auto-start :program:`MPD` upon login, type:
-
-.. code-block:: none
-
-    systemctl --user enable mpd
-
 Configuration
 *************
 
@@ -259,6 +220,13 @@ another file; the given file name is relative to the current file:
 .. code-block:: none
 
   include "other.conf"
+
+You can use :code:`include_optional` instead if you want the included file
+to be optional; the directive will be ignored if the file does not exist:
+
+.. code-block:: none
+
+  include_optional "may_not_exist.conf"
 
 Configuring the music directory
 -------------------------------
@@ -335,6 +303,44 @@ The following table lists the input options valid for all plugins:
      - Allows you to disable a input plugin without recompiling. By default, all plugins are enabled.
 
 More information can be found in the :ref:`input_plugins` reference.
+
+.. _input_cache:
+
+Configuring the Input Cache
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The input cache prefetches queued song files before they are going to
+be played.  This has several advantages:
+
+- risk of buffer underruns during playback is reduced because this
+  decouples playback from disk (or network) I/O
+- bulk transfers may be faster and more energy efficient than loading
+  small chunks on-the-fly
+- by prefetching several songs at a time, the hard disk can spin down
+  for longer periods of time
+
+This comes at a cost:
+
+- memory usage
+- bulk transfers may reduce the performance of other applications
+  which also want to access the disk (if the kernel's I/O scheduler
+  isn't doing its job properly)
+
+To enable the input cache, add an ``input_cache`` block to the
+configuration file:
+
+.. code-block:: none
+
+    input_cache {
+        size "1 GB"
+    }
+
+This allocates a cache of 1 GB.  If the cache grows larger than that,
+older files will be evicted.
+
+You can flush the cache at any time by sending ``SIGHUP`` to the
+:program:`MPD` process, see :ref:`signals`.
+
 
 Configuring decoder plugins
 ---------------------------
@@ -419,7 +425,7 @@ The following table lists the audio_output options valid for all plugins:
        :ref:`oss_plugin` and PulseAudio :ref:`pulse_plugin`), the
        software mixer, the ":samp:`null`" mixer (allows setting the
        volume, but with no effect; this can be used as a trick to
-       implement an external mixer :ref:`external_mixer`) or no mixer
+       implement an external mixer, see :ref:`external_mixer`) or no mixer
        (:samp:`none`). By default, the hardware mixer is used for
        devices which support it, and none for the others.
    * - **filters "name,...**"
@@ -714,8 +720,9 @@ Do not change these unless you know what you are doing.
 
    * - Setting
      - Description
-   * - **audio_buffer_size KBYTES**
-     - Adjust the size of the internal audio buffer. Default is 4096 (4 MiB).
+   * - **audio_buffer_size SIZE**
+     - Adjust the size of the internal audio buffer. Default is
+       :samp:`4 MB` (4 MiB).
 
 Zeroconf
 ^^^^^^^^
@@ -763,22 +770,24 @@ The :code:`music_directory` setting tells :program:`MPD` to read files from the 
 
 The database setting tells :program:`MPD` to pass all database queries on to the :program:`MPD` instance running on the file server (using the proxy plugin).
 
+.. _realtime:
+
 Real-Time Scheduling
 --------------------
 
 On Linux, :program:`MPD` attempts to configure real-time scheduling for some threads that benefit from it.
 
-This is only possible you allow :program:`MPD` to do it. This privilege is controlled by :envvar:`RLIMIT_RTPRIO` :envvar:`RLIMIT_RTTIME`. You can configure this privilege with :command:`ulimit` before launching :program:`MPD`:
+This is only possible if you allow :program:`MPD` to do it. This privilege is controlled by :envvar:`RLIMIT_RTPRIO` :envvar:`RLIMIT_RTTIME`. You can configure this privilege with :command:`ulimit` before launching :program:`MPD`:
 
 .. code-block:: none
 
-    ulimit -HS -r 50; mpd
+    ulimit -HS -r 40; mpd
 
 Or you can use the :command:`prlimit` program from the util-linux package:
 
 .. code-block:: none
 
-    prlimit --rtprio=50 --rttime=unlimited mpd
+    prlimit --rtprio=40 --rttime=unlimited mpd
 
 The systemd service file shipped with :program:`MPD` comes with this setting.
 
@@ -796,10 +805,10 @@ You can verify whether the real-time scheduler is active with the ps command:
       PID   TID CLS RTPRIO COMMAND
     16257 16257  TS      - mpd
     16257 16258  TS      - io
-    16257 16259  FF     50 rtio
+    16257 16259  FF     40 rtio
     16257 16260  TS      - player
     16257 16261  TS      - decoder
-    16257 16262  FF     50 output:ALSA
+    16257 16262  FF     40 output:ALSA
     16257 16263 IDL      0 update
 
 The CLS column shows the CPU scheduler; TS is the normal scheduler; FF and RR are real-time schedulers. In this example, two threads use the real-time scheduler: the output thread and the rtio (real-time I/O) thread; these two are the important ones. The database update thread uses the idle scheduler ("IDL in ps), which only gets CPU when no other process needs it.
@@ -813,6 +822,89 @@ The CLS column shows the CPU scheduler; TS is the normal scheduler; FF and RR ar
 
 Using MPD
 *********
+
+Starting and Stopping MPD
+-------------------------
+
+The simplest (but not the best) way to start :program:`MPD` is to
+simply type::
+
+ mpd
+
+This will start :program:`MPD` as a daemon process (which means it
+detaches from your terminal and continues to run in background).  To
+stop it, send ``SIGTERM`` to the process; if you have configured a
+``pid_file``, you can use the ``--kill`` option::
+
+ mpd --kill
+
+The best way to manage :program:`MPD` processes is to use a service
+manager such as :program:`systemd`.
+
+systemd
+^^^^^^^
+
+:program:`MPD` ships with :program:`systemd` service units.
+
+If you have installed :program:`MPD` with your operating system's
+package manager, these are probably preinstalled, so you can start and
+stop :program:`MPD` this way (like any other service)::
+
+ systemctl start mpd
+ systemctl stop mpd
+
+systemd socket activation
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Using systemd, you can launch :program:`MPD` on demand when the first client attempts to connect.
+
+:program:`MPD` comes with two systemd unit files: a "service" unit and
+a "socket" unit.  These will be installed to the directory specified
+with :code:`-Dsystemd_system_unit_dir=...`,
+e.g. :file:`/lib/systemd/system`.
+
+To enable socket activation, type:
+
+.. code-block:: none
+
+    systemctl enable mpd.socket
+    systemctl start mpd.socket
+
+In this configuration, :program:`MPD` will ignore the :ref:`listener
+settings <listeners>` (``bind_to_address`` and ``port``).
+
+systemd user unit
+^^^^^^^^^^^^^^^^^
+
+You can launch :program:`MPD` as a systemd user unit.  These will be
+installed to the directory specified with
+:code:`-Dsystemd_user_unit_dir=...`,
+e.g. :file:`/usr/lib/systemd/user` or
+:file:`$HOME/.local/share/systemd/user`.
+
+Once the user unit is installed, you can start and stop :program:`MPD` like any other service:
+
+.. code-block:: none
+
+    systemctl --user start mpd
+
+To auto-start :program:`MPD` upon login, type:
+
+.. code-block:: none
+
+    systemctl --user enable mpd
+
+.. _signals:
+
+Signals
+-------
+
+:program:`MPD` understands the following UNIX signals:
+
+- ``SIGTERM``, ``SIGINT``: shut down MPD
+- ``SIGHUP``: reopen log files (send this after log rotation) and
+  flush caches (see :ref:`input_cache`)
+
 
 The client
 ----------
@@ -953,6 +1045,22 @@ is no way for :program:`MPD` to find out whether the DAC supports
 it. DSD to PCM conversion is the fallback if DSD cannot be used
 directly.
 
+ICY-MetaData
+------------
+
+Some MP3 streams send information about the current song with a
+protocol named `"ICY-MetaData"
+<http://www.smackfu.com/stuff/programming/shoutcast.html>`_.
+:program:`MPD` makes its ``StreamTitle`` value available as ``Title``
+tag.
+
+By default, :program:`MPD` assumes this tag is UTF-8-encoded.  To tell
+:program:`MPD` to assume a different character set, specify it in the
+``charset`` URL fragment parameter, e.g.::
+
+ mpc add 'http://radio.example.com/stream#charset=cp1251'
+
+
 Client Hacks
 ************
 
@@ -977,7 +1085,7 @@ Sometimes, it is helpful to run :program:`MPD` in a terminal and follow what hap
 
 .. code-block:: none
 
-    mpd --stdout --no-daemon --verbose
+    mpd --stderr --no-daemon --verbose
 
 Support
 -------
@@ -990,34 +1098,66 @@ The :program:`MPD` project runs a `forum <https://forum.musicpd.org/>`_ and an I
 Common Problems
 ^^^^^^^^^^^^^^^
 
-1. Database
-"""""""""""
+Startup
+"""""""
 
-Question: I can't see my music in the MPD database!
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Error "could not get realtime scheduling"
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+See :ref:`realtime`.  You can safely ignore this, but you won't
+benefit from real-time scheduling.  This only makes a difference if
+your computer runs programs other than MPD.
+
+Error "Failed to initialize io_uring"
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Linux specific: the io_uring subsystem could not be initialized.  This
+is not a critical error - MPD will fall back to "classic" blocking
+disk I/O.  You can safely ignore this error, but you won't benefit
+from io_uring's advantages.
+
+* "Cannot allocate memory" usually means that your memlock limit
+  (``ulimit -l`` in bash or ``LimitMEMLOCK`` in systemd) is too low.
+  64 MB is a reasonable value for this limit.
+* Your Linux kernel might be too old and does not support io_uring.
+
+Error "bind to '0.0.0.0:6600' failed (continuing anyway, because binding to '[::]:6600' succeeded)"
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This happens on Linux when :file:`/proc/sys/net/ipv6/bindv6only` is
+disabled.  MPD first binds to IPv6, and this automatically binds to
+IPv4 as well; after that, MPD binds to IPv4, but that fails.  You can
+safely ignore this, because MPD works on both IPv4 and IPv6.
+
+
+Database
+""""""""
+
+I can't see my music in the MPD database
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * Check your :code:`music_directory` setting. 
 * Does the MPD user have read permission on all music files, and read+execute permission on all music directories (and all of their parent directories)? 
 * Did you update the database? (mpc update) 
 * Did you enable all relevant decoder plugins at compile time? :command:`mpd --version` will tell you. 
 
-Question: MPD doesn't read ID3 tags!
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+MPD doesn't read ID3 tags!
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * You probably compiled :program:`MPD` without libid3tag. :command:`mpd --version` will tell you.
 
-2. Playback
-"""""""""""
+Playback
+""""""""
 
-Question: I can't hear music on my client!
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+I can't hear music on my client
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * That problem usually follows a misunderstanding of the nature of :program:`MPD`. :program:`MPD` is a remote-controlled music player, not a music distribution system. Usually, the speakers are connected to the box where :program:`MPD` runs, and the :program:`MPD` client only sends control commands, but the client does not actually play your music.
 
   :program:`MPD` has output plugins which allow hearing music on a remote host (such as httpd), but that is not :program:`MPD`'s primary design goal. 
 
-Question: "Device or resource busy"
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Error "Device or resource busy"
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 *  This ALSA error means that another program uses your sound hardware exclusively. You can stop that program to allow :program:`MPD` to use it.
 
@@ -1057,7 +1197,7 @@ You can extract the backtrace from a core dump, or by running :program:`MPD` in 
 
 .. code-block:: none
 
-    gdb --args mpd --stdout --no-daemon --verbose
+    gdb --args mpd --stderr --no-daemon --verbose
     run
 
 As soon as you have reproduced the crash, type ":command:`bt`" on the

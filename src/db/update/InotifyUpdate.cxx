@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -78,10 +78,10 @@ struct WatchDirectory {
 
 	void LoadExcludeList(Path directory_path) noexcept;
 
-	gcc_pure
+	[[nodiscard]] gcc_pure
 	unsigned GetDepth() const noexcept;
 
-	gcc_pure
+	[[nodiscard]] gcc_pure
 	AllocatedPath GetUriFS() const noexcept;
 };
 
@@ -262,7 +262,7 @@ WatchDirectory::GetDepth() const noexcept
 
 static void
 mpd_inotify_callback(int wd, unsigned mask,
-		     gcc_unused const char *name, gcc_unused void *ctx)
+		     [[maybe_unused]] const char *name, [[maybe_unused]] void *ctx)
 {
 	WatchDirectory *directory;
 
@@ -355,7 +355,7 @@ mpd_inotify_init(EventLoop &loop, Storage &storage, UpdateService &update,
 }
 
 void
-mpd_inotify_finish(void) noexcept
+mpd_inotify_finish() noexcept
 {
 	if (inotify_source == nullptr)
 		return;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2017 Content Management AG
+ * Copyright 2007-2019 Content Management AG
  * All rights reserved.
  *
  * author: Max Kellermann <mk@cm4all.com>
@@ -35,8 +35,7 @@
 
 #include <dbus/dbus.h>
 
-#include <algorithm>
-#include <stdexcept>
+#include <utility>
 
 namespace ODBus {
 
@@ -73,7 +72,7 @@ public:
 
 	static Message StealReply(DBusPendingCall &pending);
 
-	static Message Pop(DBusConnection &connection);
+	static Message Pop(DBusConnection &connection) noexcept;
 
 	bool IsDefined() const noexcept {
 		return msg != nullptr;

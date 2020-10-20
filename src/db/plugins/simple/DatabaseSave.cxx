@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,7 +19,6 @@
 
 #include "DatabaseSave.hxx"
 #include "db/DatabaseLock.hxx"
-#include "Directory.hxx"
 #include "DirectorySave.hxx"
 #include "fs/io/BufferedOutputStream.hxx"
 #include "fs/io/TextFile.hxx"
@@ -28,6 +27,7 @@
 #include "fs/Charset.hxx"
 #include "util/StringCompare.hxx"
 #include "util/RuntimeError.hxx"
+#include "Version.h"
 
 #include <string.h>
 #include <stdlib.h>

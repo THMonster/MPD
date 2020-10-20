@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,7 +21,7 @@
 #include "../DecoderAPI.hxx"
 #include "../DecoderBuffer.hxx"
 #include "input/InputStream.hxx"
-#include "CheckAudioFormat.hxx"
+#include "pcm/CheckAudioFormat.hxx"
 #include "tag/Handler.hxx"
 #include "util/ScopeExit.hxx"
 #include "util/ConstBuffer.hxx"
@@ -29,12 +29,10 @@
 #include "util/Math.hxx"
 #include "Log.hxx"
 
+#include <cassert>
+#include <cstring>
+
 #include <neaacdec.h>
-
-#include <exception>
-
-#include <assert.h>
-#include <string.h>
 
 static const unsigned adts_sample_rates[] =
     { 96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050,
@@ -73,8 +71,7 @@ adts_find_frame(DecoderBuffer &buffer)
 			return 0;
 
 		/* find the 0xff marker */
-		const uint8_t *p = (const uint8_t *)
-			memchr(data.data, 0xff, data.size);
+		auto p = (const uint8_t *)std::memchr(data.data, 0xff, data.size);
 		if (p == nullptr) {
 			/* no marker - discard the buffer */
 			buffer.Clear();
@@ -232,7 +229,7 @@ faad_song_duration(DecoderBuffer &buffer, InputStream &is)
 static NeAACDecHandle
 faad_decoder_new()
 {
-	const NeAACDecHandle decoder = NeAACDecOpen();
+	auto decoder = NeAACDecOpen();
 
 	NeAACDecConfigurationPtr config =
 		NeAACDecGetCurrentConfiguration(decoder);
@@ -325,7 +322,7 @@ faad_get_file_time(InputStream &is)
 
 static void
 faad_stream_decode(DecoderClient &client, InputStream &is,
-		   DecoderBuffer &buffer, const NeAACDecHandle decoder)
+		   DecoderBuffer &buffer, NeAACDecHandle decoder)
 {
 	const auto total_time = faad_song_duration(buffer, is);
 
@@ -367,17 +364,17 @@ faad_stream_decode(DecoderClient &client, InputStream &is,
 		}
 
 		if (frame_info.channels != audio_format.channels) {
-			FormatDefault(faad_decoder_domain,
-				      "channel count changed from %u to %u",
-				      audio_format.channels, frame_info.channels);
+			FormatNotice(faad_decoder_domain,
+				     "channel count changed from %u to %u",
+				     audio_format.channels, frame_info.channels);
 			break;
 		}
 
 		if (frame_info.samplerate != audio_format.sample_rate) {
-			FormatDefault(faad_decoder_domain,
-				      "sample rate changed from %u to %lu",
-				      audio_format.sample_rate,
-				      (unsigned long)frame_info.samplerate);
+			FormatNotice(faad_decoder_domain,
+				     "sample rate changed from %u to %lu",
+				     audio_format.sample_rate,
+				     (unsigned long)frame_info.samplerate);
 			break;
 		}
 
@@ -407,7 +404,7 @@ faad_stream_decode(DecoderClient &client, InputStream &is)
 
 	/* create the libfaad decoder */
 
-	const NeAACDecHandle decoder = faad_decoder_new();
+	auto decoder = faad_decoder_new();
 	AtScopeExit(decoder) { NeAACDecClose(decoder); };
 
 	faad_stream_decode(client, is, buffer, decoder);
@@ -430,15 +427,7 @@ static const char *const faad_mime_types[] = {
 	"audio/aac", "audio/aacp", nullptr
 };
 
-const DecoderPlugin faad_decoder_plugin = {
-	"faad",
-	nullptr,
-	nullptr,
-	faad_stream_decode,
-	nullptr,
-	nullptr,
-	faad_scan_stream,
-	nullptr,
-	faad_suffixes,
-	faad_mime_types,
-};
+constexpr DecoderPlugin faad_decoder_plugin =
+	DecoderPlugin("faad", faad_stream_decode, faad_scan_stream)
+	.WithSuffixes(faad_suffixes)
+	.WithMimeTypes(faad_mime_types);

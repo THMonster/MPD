@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -33,7 +33,7 @@ inline void
 UpdateWalk::UpdateSongFile2(Directory &directory,
 			    const char *name, const char *suffix,
 			    const StorageFileInfo &info) noexcept
-{
+try {
 	Song *song;
 	{
 		const ScopeDatabaseLock protect;
@@ -61,8 +61,9 @@ UpdateWalk::UpdateSongFile2(Directory &directory,
 	if (song == nullptr) {
 		FormatDebug(update_domain, "reading %s/%s",
 			    directory.GetPath(), name);
-		song = Song::LoadFile(storage, name, directory);
-		if (song == nullptr) {
+
+		auto new_song = Song::LoadFile(storage, name, directory);
+		if (!new_song) {
 			FormatDebug(update_domain,
 				    "ignoring unrecognized file %s/%s",
 				    directory.GetPath(), name);
@@ -71,15 +72,15 @@ UpdateWalk::UpdateSongFile2(Directory &directory,
 
 		{
 			const ScopeDatabaseLock protect;
-			directory.AddSong(song);
+			directory.AddSong(std::move(new_song));
 		}
 
 		modified = true;
-		FormatDefault(update_domain, "added %s/%s",
-			      directory.GetPath(), name);
+		FormatNotice(update_domain, "added %s/%s",
+			     directory.GetPath(), name);
 	} else if (info.mtime != song->mtime || walk_discard) {
-		FormatDefault(update_domain, "updating %s/%s",
-			      directory.GetPath(), name);
+		FormatNotice(update_domain, "updating %s/%s",
+			     directory.GetPath(), name);
 		if (!song->UpdateFile(storage)) {
 			FormatDebug(update_domain,
 				    "deleting unrecognized file %s/%s",
@@ -89,6 +90,10 @@ UpdateWalk::UpdateSongFile2(Directory &directory,
 
 		modified = true;
 	}
+} catch (...) {
+	FormatError(std::current_exception(),
+		    "error reading file %s/%s",
+		    directory.GetPath(), name);
 }
 
 bool

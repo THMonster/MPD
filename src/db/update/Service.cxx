@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -36,12 +36,12 @@
 #include "event/Loop.hxx"
 #endif
 
-#include <assert.h>
+#include <cassert>
 
 UpdateService::UpdateService(const ConfigData &_config,
 			     EventLoop &_loop, SimpleDatabase &_db,
 			     CompositeStorage &_storage,
-			     DatabaseListener &_listener)
+			     DatabaseListener &_listener) noexcept
 	:config(_config),
 	 defer(_loop, BIND_THIS_METHOD(RunDeferred)),
 	 db(_db), storage(_storage),
@@ -50,18 +50,16 @@ UpdateService::UpdateService(const ConfigData &_config,
 {
 }
 
-UpdateService::~UpdateService()
+UpdateService::~UpdateService() noexcept
 {
 	CancelAllAsync();
 
 	if (update_thread.IsDefined())
 		update_thread.Join();
-
-	delete walk;
 }
 
 void
-UpdateService::CancelAllAsync()
+UpdateService::CancelAllAsync() noexcept
 {
 	assert(GetEventLoop().IsInside());
 
@@ -72,7 +70,7 @@ UpdateService::CancelAllAsync()
 }
 
 void
-UpdateService::CancelMount(const char *uri)
+UpdateService::CancelMount(const char *uri) noexcept
 {
 	/* determine which (mounted) database will be updated and what
 	   storage will be scanned */
@@ -108,7 +106,7 @@ UpdateService::CancelMount(const char *uri)
 }
 
 inline void
-UpdateService::Task()
+UpdateService::Task() noexcept
 {
 	assert(walk != nullptr);
 
@@ -128,8 +126,9 @@ UpdateService::Task()
 	if (modified || !next.db->FileExists()) {
 		try {
 			next.db->Save();
-		} catch (const std::exception &e) {
-			LogError(e, "Failed to save database");
+		} catch (...) {
+			LogError(std::current_exception(),
+				 "Failed to save database");
 		}
 	}
 
@@ -151,7 +150,8 @@ UpdateService::StartThread(UpdateQueueItem &&i)
 	modified = false;
 
 	next = std::move(i);
-	walk = new UpdateWalk(config, GetEventLoop(), listener, *next.storage);
+	walk = std::make_unique<UpdateWalk>(config, GetEventLoop(), listener,
+					    *next.storage);
 
 	update_thread.Start();
 
@@ -160,7 +160,7 @@ UpdateService::StartThread(UpdateQueueItem &&i)
 }
 
 unsigned
-UpdateService::GenerateId()
+UpdateService::GenerateId() noexcept
 {
 	unsigned id = update_task_id + 1;
 	if (id > update_task_id_max)
@@ -169,7 +169,7 @@ UpdateService::GenerateId()
 }
 
 unsigned
-UpdateService::Enqueue(const char *path, bool discard)
+UpdateService::Enqueue(std::string_view path, bool discard)
 {
 	assert(GetEventLoop().IsInside());
 
@@ -192,17 +192,12 @@ UpdateService::Enqueue(const char *path, bool discard)
 		if (db2 == nullptr)
 			throw std::runtime_error("Cannot update this type of database");
 
-		if (lr.uri == nullptr) {
+		if (lr.rest.data() == nullptr) {
 			storage2 = storage.GetMount(path);
 			path = "";
 		} else {
-			assert(lr.uri > path);
-			assert(lr.uri < path + strlen(path));
-			assert(lr.uri[-1] == '/');
-
-			const std::string mountpoint(path, lr.uri - 1);
-			storage2 = storage.GetMount(mountpoint.c_str());
-			path = lr.uri;
+			storage2 = storage.GetMount(lr.uri);
+			path = lr.rest;
 		}
 	} else {
 		/* use the "root" database/storage */
@@ -248,8 +243,7 @@ UpdateService::RunDeferred() noexcept
 	if (update_thread.IsDefined())
 		update_thread.Join();
 
-	delete walk;
-	walk = nullptr;
+	walk.reset();
 
 	next.Clear();
 

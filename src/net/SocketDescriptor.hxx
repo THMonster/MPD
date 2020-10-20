@@ -31,7 +31,7 @@
 #define SOCKET_DESCRIPTOR_HXX
 
 #include "Features.hxx"
-#include "system/FileDescriptor.hxx"
+#include "io/FileDescriptor.hxx"
 
 #include <type_traits>
 
@@ -115,6 +115,7 @@ public:
 	using FileDescriptor::SetNonBlocking;
 	using FileDescriptor::SetBlocking;
 	using FileDescriptor::Duplicate;
+	using FileDescriptor::CheckDuplicate;
 	using FileDescriptor::Close;
 #else
 	bool SetNonBlocking() noexcept;

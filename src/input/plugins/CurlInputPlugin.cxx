@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,7 +19,6 @@
 
 #include "CurlInputPlugin.hxx"
 #include "lib/curl/Error.hxx"
-#include "lib/curl/Easy.hxx"
 #include "lib/curl/Global.hxx"
 #include "lib/curl/Init.hxx"
 #include "lib/curl/Request.hxx"
@@ -36,24 +35,27 @@
 #include "event/Call.hxx"
 #include "event/Loop.hxx"
 #include "util/ASCII.hxx"
-#include "util/StringUtil.hxx"
 #include "util/StringFormat.hxx"
+#include "util/StringView.hxx"
 #include "util/NumberParser.hxx"
-#include "util/RuntimeError.hxx"
 #include "util/Domain.hxx"
 #include "Log.hxx"
 #include "PluginUnavailable.hxx"
+#include "config.h"
 
+#ifdef HAVE_ICU_CONVERTER
+#include "lib/icu/Converter.hxx"
+#include "util/AllocatedString.hxx"
+#include "util/UriExtract.hxx"
+#include "util/UriQueryParser.hxx"
+#endif
+
+#include <cassert>
 #include <cinttypes>
 
-#include <assert.h>
 #include <string.h>
 
 #include <curl/curl.h>
-
-#if LIBCURL_VERSION_NUM < 0x071200
-#error libcurl is too old
-#endif
 
 /**
  * Do not buffer more than this number of bytes.  It should be a
@@ -87,7 +89,7 @@ public:
 			I &&_icy,
 			Mutex &_mutex);
 
-	~CurlInputStream() noexcept;
+	~CurlInputStream() noexcept override;
 
 	CurlInputStream(const CurlInputStream &) = delete;
 	CurlInputStream &operator=(const CurlInputStream &) = delete;
@@ -140,8 +142,8 @@ private:
 	void OnError(std::exception_ptr e) noexcept override;
 
 	/* virtual methods from AsyncInputStream */
-	virtual void DoResume() override;
-	virtual void DoSeek(offset_type new_offset) override;
+	void DoResume() override;
+	void DoSeek(offset_type new_offset) override;
 };
 
 /** libcurl should accept "ICY 200 OK" */
@@ -162,9 +164,8 @@ CurlInputStream::DoResume()
 {
 	assert(GetEventLoop().IsInside());
 
-	mutex.unlock();
+	const ScopeUnlock unlock(mutex);
 	request->Resume();
-	mutex.lock();
 }
 
 void
@@ -185,6 +186,45 @@ CurlInputStream::FreeEasyIndirect() noexcept
 	BlockingCall(GetEventLoop(), [this](){
 			FreeEasy();
 		});
+}
+
+#ifdef HAVE_ICU_CONVERTER
+
+static std::unique_ptr<IcuConverter>
+CreateIcuConverterForUri(const char *uri)
+{
+	const char *fragment = uri_get_fragment(uri);
+	if (fragment == nullptr)
+		return nullptr;
+
+	const auto charset = UriFindRawQueryParameter(fragment, "charset");
+	if (charset == nullptr)
+		return nullptr;
+
+	const std::string copy(charset.data, charset.size);
+	return IcuConverter::Create(copy.c_str());
+}
+
+#endif
+
+template<typename F>
+static void
+WithConvertedTagValue(const char *uri, const char *value, F &&f) noexcept
+{
+#ifdef HAVE_ICU_CONVERTER
+	try {
+		auto converter = CreateIcuConverterForUri(uri);
+		if (converter) {
+			f(converter->ToUTF8(value).c_str());
+			return;
+		}
+	} catch (...) {
+	}
+#else
+	(void)uri;
+#endif
+
+	f(value);
 }
 
 void
@@ -236,7 +276,12 @@ CurlInputStream::OnHeaders(unsigned status,
 
 	if (i != headers.end()) {
 		TagBuilder tag_builder;
-		tag_builder.AddItem(TAG_NAME, i->second.c_str());
+
+		WithConvertedTagValue(GetURI(), i->second.c_str(),
+				      [&tag_builder](const char *value){
+					      tag_builder.AddItem(TAG_NAME,
+								  value);
+				      });
 
 		SetTag(tag_builder.CommitNew());
 	}
@@ -524,16 +569,26 @@ input_curl_open(const char *url, Mutex &mutex)
 	return CurlInputStream::Open(url, {}, mutex);
 }
 
-static constexpr const char *curl_prefixes[] = {
-	"http://",
-	"https://",
-	nullptr
-};
+static std::set<std::string>
+input_curl_protocols() noexcept
+{
+	std::set<std::string> protocols;
+	auto version_info = curl_version_info(CURLVERSION_FIRST);
+	for (auto proto_ptr = version_info->protocols; *proto_ptr != nullptr; proto_ptr++) {
+		if (protocol_is_whitelisted(*proto_ptr)) {
+			std::string schema(*proto_ptr);
+			schema.append("://");
+			protocols.emplace(schema);
+		}
+	}
+	return protocols;
+}
 
 const struct InputPlugin input_plugin_curl = {
 	"curl",
-	curl_prefixes,
+	nullptr,
 	input_curl_init,
 	input_curl_finish,
 	input_curl_open,
+	input_curl_protocols
 };

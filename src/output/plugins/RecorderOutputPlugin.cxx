@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,7 +23,6 @@
 #include "encoder/ToOutputStream.hxx"
 #include "encoder/EncoderInterface.hxx"
 #include "encoder/Configured.hxx"
-#include "config/Domain.hxx"
 #include "config/Path.hxx"
 #include "Log.hxx"
 #include "fs/AllocatedPath.hxx"
@@ -31,10 +30,10 @@
 #include "util/Domain.hxx"
 #include "util/ScopeExit.hxx"
 
-#include <stdexcept>
+#include <cassert>
 #include <memory>
+#include <stdexcept>
 
-#include <assert.h>
 #include <stdlib.h>
 
 static constexpr Domain recorder_domain("recorder");
@@ -68,7 +67,7 @@ class RecorderOutput final : AudioOutput {
 	 */
 	FileOutputStream *file;
 
-	RecorderOutput(const ConfigBlock &block);
+	explicit RecorderOutput(const ConfigBlock &block);
 
 public:
 	static AudioOutput *Create(EventLoop &, const ConfigBlock &block) {
@@ -88,8 +87,7 @@ private:
 
 	size_t Play(const void *chunk, size_t size) override;
 
-private:
-	gcc_pure
+	[[nodiscard]] gcc_pure
 	bool HasDynamicPath() const noexcept {
 		return !format_path.empty();
 	}
@@ -97,7 +95,7 @@ private:
 	/**
 	 * Finish the encoder and commit the file.
 	 *
-	 * Throws #std::runtime_error on error.
+	 * Throws on error.
 	 */
 	void Commit();
 
@@ -252,7 +250,7 @@ RecorderOutput::ReopenFormat(AllocatedPath &&new_path)
 	assert(path.IsNull());
 	assert(file == nullptr);
 
-	FileOutputStream *new_file = new FileOutputStream(new_path);
+	auto *new_file = new FileOutputStream(new_path);
 
 	AudioFormat new_audio_format = effective_audio_format;
 

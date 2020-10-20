@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -28,8 +28,6 @@
 #include <chrono>
 #include <forward_list>
 
-struct ConfigParam;
-struct ConfigBlock;
 class AllocatedPath;
 
 struct ConfigData {
@@ -54,6 +52,14 @@ struct ConfigData {
 		return list.empty() ? nullptr : &list.front();
 	}
 
+	template<typename F>
+	auto With(ConfigOption option, F &&f) const {
+		const auto *param = GetParam(option);
+		return param != nullptr
+			? param->With(std::forward<F>(f))
+			: f(nullptr);
+	}
+
 	gcc_pure
 	const char *GetString(ConfigOption option,
 			      const char *default_value=nullptr) const noexcept;
@@ -72,22 +78,14 @@ struct ConfigData {
 
 	std::chrono::steady_clock::duration
 	GetUnsigned(ConfigOption option,
-		    std::chrono::steady_clock::duration default_value) const {
-		// TODO: allow unit suffixes
-		auto u = GetUnsigned(option, default_value.count());
-		return std::chrono::steady_clock::duration(u);
-	}
+		    std::chrono::steady_clock::duration default_value) const;
 
 	unsigned GetPositive(ConfigOption option,
 			     unsigned default_value) const;
 
 	std::chrono::steady_clock::duration
 	GetPositive(ConfigOption option,
-		    std::chrono::steady_clock::duration default_value) const {
-		// TODO: allow unit suffixes
-		auto u = GetPositive(option, default_value.count());
-		return std::chrono::steady_clock::duration(u);
-	}
+		    std::chrono::steady_clock::duration default_value) const;
 
 	bool GetBool(ConfigOption option, bool default_value) const;
 

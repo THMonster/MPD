@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,9 +24,10 @@
 #include "Item.hxx" // IWYU pragma: export
 #include "Chrono.hxx"
 #include "util/Compiler.h"
+#include "util/DereferenceIterator.hxx"
 
-#include <algorithm>
 #include <memory>
+#include <utility>
 
 /**
  * The meta information about a song file.  It is a MPD specific
@@ -151,50 +152,8 @@ struct Tag {
 	gcc_pure gcc_returns_nonnull
 	const char *GetSortValue(TagType type) const noexcept;
 
-	class const_iterator {
-		friend struct Tag;
-		const TagItem *const*cursor;
-
-		constexpr const_iterator(const TagItem *const*_cursor) noexcept
-			:cursor(_cursor) {}
-
-	public:
-		constexpr const TagItem &operator*() const noexcept {
-			return **cursor;
-		}
-
-		constexpr const TagItem *operator->() const noexcept {
-			return *cursor;
-		}
-
-		const_iterator &operator++() noexcept {
-			++cursor;
-			return *this;
-		}
-
-		const_iterator operator++(int) noexcept {
-			auto result = cursor++;
-			return const_iterator{result};
-		}
-
-		const_iterator &operator--() noexcept {
-			--cursor;
-			return *this;
-		}
-
-		const_iterator operator--(int) noexcept {
-			auto result = cursor--;
-			return const_iterator{result};
-		}
-
-		constexpr bool operator==(const_iterator other) const noexcept {
-			return cursor == other.cursor;
-		}
-
-		constexpr bool operator!=(const_iterator other) const noexcept {
-			return cursor != other.cursor;
-		}
-	};
+	using const_iterator = DereferenceIterator<TagItem *const*,
+						   const TagItem>;
 
 	const_iterator begin() const noexcept {
 		return const_iterator{items};

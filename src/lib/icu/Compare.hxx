@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,6 +23,8 @@
 #include "util/Compiler.h"
 #include "util/AllocatedString.hxx"
 
+#include <string_view>
+
 #ifdef _WIN32
 #include <wchar.h>
 #endif
@@ -44,7 +46,7 @@ class IcuCompare {
 public:
 	IcuCompare():needle(nullptr) {}
 
-	explicit IcuCompare(const char *needle) noexcept;
+	explicit IcuCompare(std::string_view needle) noexcept;
 
 	IcuCompare(const IcuCompare &src) noexcept
 		:needle(src

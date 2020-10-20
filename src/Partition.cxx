@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,24 +20,33 @@
 #include "config.h"
 #include "Partition.hxx"
 #include "Instance.hxx"
+#include "Log.hxx"
 #include "song/DetachedSong.hxx"
 #include "mixer/Volume.hxx"
 #include "IdleFlags.hxx"
 #include "client/Listener.hxx"
+#include "client/Client.hxx"
+#include "input/cache/Manager.hxx"
+#include "util/Domain.hxx"
+
+static constexpr Domain cache_domain("cache");
 
 Partition::Partition(Instance &_instance,
 		     const char *_name,
 		     unsigned max_length,
 		     unsigned buffer_chunks,
 		     AudioFormat configured_audio_format,
-		     const ReplayGainConfig &replay_gain_config)
+		     const ReplayGainConfig &replay_gain_config) noexcept
 	:instance(_instance),
 	 name(_name),
 	 listener(new ClientListener(instance.event_loop, *this)),
+	 idle_monitor(instance.event_loop, BIND_THIS_METHOD(OnIdleMonitor)),
 	 global_events(instance.event_loop, BIND_THIS_METHOD(OnGlobalEvent)),
 	 playlist(max_length, *this),
-	 outputs(*this),
-	 pc(*this, outputs, buffer_chunks,
+	 outputs(pc, *this),
+	 pc(*this, outputs,
+	    instance.input_cache.get(),
+	    buffer_chunks,
 	    configured_audio_format, replay_gain_config)
 {
 	UpdateEffectiveReplayGainMode();
@@ -46,13 +55,51 @@ Partition::Partition(Instance &_instance,
 Partition::~Partition() noexcept = default;
 
 void
-Partition::EmitIdle(unsigned mask)
+Partition::BeginShutdown() noexcept
 {
-	instance.EmitIdle(mask);
+	pc.Kill();
+	listener.reset();
+}
+
+static void
+PrefetchSong(InputCacheManager &cache, const char *uri) noexcept
+{
+	if (cache.Contains(uri))
+		return;
+
+	FormatDebug(cache_domain, "Prefetch '%s'", uri);
+
+	try {
+		cache.Prefetch(uri);
+	} catch (...) {
+		FormatError(std::current_exception(),
+			    "Prefetch '%s' failed", uri);
+	}
+}
+
+static void
+PrefetchSong(InputCacheManager &cache, const DetachedSong &song) noexcept
+{
+	PrefetchSong(cache, song.GetURI());
+}
+
+inline void
+Partition::PrefetchQueue() noexcept
+{
+	if (!instance.input_cache)
+		return;
+
+	auto &cache = *instance.input_cache;
+
+	int next = playlist.GetNextPosition();
+	if (next >= 0)
+		PrefetchSong(cache, playlist.queue.Get(next));
+
+	// TODO: prefetch more songs
 }
 
 void
-Partition::UpdateEffectiveReplayGainMode()
+Partition::UpdateEffectiveReplayGainMode() noexcept
 {
 	auto mode = replay_gain_mode;
 	if (mode == ReplayGainMode::AUTO)
@@ -68,7 +115,7 @@ Partition::UpdateEffectiveReplayGainMode()
 #ifdef ENABLE_DATABASE
 
 const Database *
-Partition::GetDatabase() const
+Partition::GetDatabase() const noexcept
 {
 	return instance.GetDatabase();
 }
@@ -80,7 +127,7 @@ Partition::GetDatabaseOrThrow() const
 }
 
 void
-Partition::DatabaseModified(const Database &db)
+Partition::DatabaseModified(const Database &db) noexcept
 {
 	playlist.DatabaseModified(db);
 	EmitIdle(IDLE_DATABASE);
@@ -89,7 +136,7 @@ Partition::DatabaseModified(const Database &db)
 #endif
 
 void
-Partition::TagModified()
+Partition::TagModified() noexcept
 {
 	auto song = pc.LockReadTaggedSong();
 	if (song)
@@ -103,31 +150,35 @@ Partition::TagModified(const char *uri, const Tag &tag) noexcept
 }
 
 void
-Partition::SyncWithPlayer()
+Partition::SyncWithPlayer() noexcept
 {
 	playlist.SyncWithPlayer(pc);
+
+	/* TODO: invoke this function in batches, to let the hard disk
+	   spin down in between */
+	PrefetchQueue();
 }
 
 void
-Partition::BorderPause()
+Partition::BorderPause() noexcept
 {
 	playlist.BorderPause(pc);
 }
 
 void
-Partition::OnQueueModified()
+Partition::OnQueueModified() noexcept
 {
 	EmitIdle(IDLE_PLAYLIST);
 }
 
 void
-Partition::OnQueueOptionsChanged()
+Partition::OnQueueOptionsChanged() noexcept
 {
 	EmitIdle(IDLE_OPTIONS);
 }
 
 void
-Partition::OnQueueSongStarted()
+Partition::OnQueueSongStarted() noexcept
 {
 	EmitIdle(IDLE_PLAYER);
 }
@@ -151,7 +202,7 @@ Partition::OnBorderPause() noexcept
 }
 
 void
-Partition::OnMixerVolumeChanged(gcc_unused Mixer &mixer, gcc_unused int volume)
+Partition::OnMixerVolumeChanged(Mixer &, int) noexcept
 {
 	InvalidateHardwareVolume();
 
@@ -160,7 +211,19 @@ Partition::OnMixerVolumeChanged(gcc_unused Mixer &mixer, gcc_unused int volume)
 }
 
 void
-Partition::OnGlobalEvent(unsigned mask)
+Partition::OnIdleMonitor(unsigned mask) noexcept
+{
+	/* send "idle" notifications to all subscribed
+	   clients */
+	for (auto &client : clients)
+		client.IdleAdd(mask);
+
+	if (mask & (IDLE_PLAYLIST|IDLE_PLAYER|IDLE_MIXER|IDLE_OUTPUT))
+		instance.OnStateModified();
+}
+
+void
+Partition::OnGlobalEvent(unsigned mask) noexcept
 {
 	if ((mask & SYNC_WITH_PLAYER) != 0)
 		SyncWithPlayer();

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2018 Max Kellermann <max.kellermann@gmail.com>
+ * Copyright 2016-2019 Max Kellermann <max.kellermann@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,10 +27,10 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "AddressInfo.hxx"
+#include "Features.hxx"
 
-#include <assert.h>
+#include <cassert>
 
 static constexpr int address_family_ranking[] = {
 #ifdef HAVE_UN

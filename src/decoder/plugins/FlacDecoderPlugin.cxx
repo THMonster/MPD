@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -53,7 +53,7 @@ static void flacPrintErroredState(FLAC__StreamDecoderState state)
 	LogError(flac_domain, FLAC__StreamDecoderStateString[state]);
 }
 
-static void flacMetadata(gcc_unused const FLAC__StreamDecoder * dec,
+static void flacMetadata([[maybe_unused]] const FLAC__StreamDecoder * dec,
 			 const FLAC__StreamMetadata * block, void *vdata)
 {
 	auto &fd = *(FlacDecoder *)vdata;
@@ -102,7 +102,7 @@ flac_scan_stream(InputStream &is, TagHandler &handler)
  * Some glue code around FLAC__stream_decoder_new().
  */
 static FlacStreamDecoder
-flac_decoder_new(void)
+flac_decoder_new()
 {
 	FlacStreamDecoder sd;
 	if(!FLAC__stream_decoder_set_metadata_respond(sd.get(), FLAC__METADATA_TYPE_VORBIS_COMMENT))
@@ -307,7 +307,7 @@ flac_decode(DecoderClient &client, InputStream &input_stream)
 }
 
 static bool
-oggflac_init(gcc_unused const ConfigBlock &block)
+oggflac_init([[maybe_unused]] const ConfigBlock &block)
 {
 	return !!FLAC_API_SUPPORTS_OGG_FLAC;
 }
@@ -368,18 +368,12 @@ static const char *const oggflac_mime_types[] = {
 	nullptr
 };
 
-const struct DecoderPlugin oggflac_decoder_plugin = {
-	"oggflac",
-	oggflac_init,
-	nullptr,
-	oggflac_decode,
-	nullptr,
-	oggflac_scan_file,
-	oggflac_scan_stream,
-	nullptr,
-	oggflac_suffixes,
-	oggflac_mime_types,
-};
+constexpr DecoderPlugin oggflac_decoder_plugin =
+	DecoderPlugin("oggflac", oggflac_decode, oggflac_scan_stream,
+		      nullptr, oggflac_scan_file)
+	.WithInit(oggflac_init)
+	.WithSuffixes(oggflac_suffixes)
+	.WithMimeTypes(oggflac_mime_types);
 
 static const char *const flac_suffixes[] = { "flac", nullptr };
 static const char *const flac_mime_types[] = {
@@ -390,15 +384,8 @@ static const char *const flac_mime_types[] = {
 	nullptr
 };
 
-const struct DecoderPlugin flac_decoder_plugin = {
-	"flac",
-	nullptr,
-	nullptr,
-	flac_decode,
-	nullptr,
-	flac_scan_file,
-	flac_scan_stream,
-	nullptr,
-	flac_suffixes,
-	flac_mime_types,
-};
+constexpr DecoderPlugin flac_decoder_plugin =
+	DecoderPlugin("flac", flac_decode, flac_scan_stream,
+		      nullptr, flac_scan_file)
+	.WithSuffixes(flac_suffixes)
+	.WithMimeTypes(flac_mime_types);

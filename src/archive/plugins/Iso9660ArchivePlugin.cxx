@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -34,6 +34,7 @@
 #include <cdio/iso9660.h>
 
 #include <array>
+#include <utility>
 
 #include <stdlib.h>
 #include <string.h>
@@ -64,7 +65,7 @@ class Iso9660ArchiveFile final : public ArchiveFile {
 	std::shared_ptr<Iso9660> iso;
 
 public:
-	Iso9660ArchiveFile(std::shared_ptr<Iso9660> &&_iso)
+	explicit Iso9660ArchiveFile(std::shared_ptr<Iso9660> &&_iso)
 		:iso(std::move(_iso)) {}
 
 	/**
@@ -73,7 +74,7 @@ public:
 	void Visit(char *path, size_t length, size_t capacity,
 		   ArchiveVisitor &visitor);
 
-	virtual void Visit(ArchiveVisitor &visitor) override;
+	void Visit(ArchiveVisitor &visitor) override;
 
 	InputStreamPtr OpenStream(const char *path,
 				  Mutex &mutex) override;
@@ -198,12 +199,12 @@ class Iso9660InputStream final : public InputStream {
 	size_t skip = 0;
 
 public:
-	Iso9660InputStream(const std::shared_ptr<Iso9660> &_iso,
+	Iso9660InputStream(std::shared_ptr<Iso9660> _iso,
 			   const char *_uri,
 			   Mutex &_mutex,
 			   lsn_t _lsn, offset_type _size)
 		:InputStream(_uri, _mutex),
-		 iso(_iso),
+		 iso(std::move(_iso)),
 		 lsn(_lsn)
 	{
 		size = _size;
@@ -212,10 +213,11 @@ public:
 	}
 
 	/* virtual methods from InputStream */
-	bool IsEOF() noexcept override;
-	size_t Read(void *ptr, size_t size) override;
+	[[nodiscard]] bool IsEOF() const noexcept override;
+	size_t Read(std::unique_lock<Mutex> &lock,
+		    void *ptr, size_t size) override;
 
-	void Seek(offset_type new_offset) override {
+	void Seek(std::unique_lock<Mutex> &, offset_type new_offset) override {
 		if (new_offset > size)
 			throw std::runtime_error("Invalid seek offset");
 
@@ -243,7 +245,8 @@ Iso9660ArchiveFile::OpenStream(const char *pathname,
 }
 
 size_t
-Iso9660InputStream::Read(void *ptr, size_t read_size)
+Iso9660InputStream::Read(std::unique_lock<Mutex> &,
+			 void *ptr, size_t read_size)
 {
 	const offset_type remaining = size - offset;
 	if (remaining == 0)
@@ -309,7 +312,7 @@ Iso9660InputStream::Read(void *ptr, size_t read_size)
 }
 
 bool
-Iso9660InputStream::IsEOF() noexcept
+Iso9660InputStream::IsEOF() const noexcept
 {
 	return offset == size;
 }

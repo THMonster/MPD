@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2018 Content Management AG
+ * Copyright 2007-2020 CM4all GmbH
  * All rights reserved.
  *
  * author: Max Kellermann <mk@cm4all.com>
@@ -33,7 +33,6 @@
 #ifndef NET_RESOLVER_HXX
 #define NET_RESOLVER_HXX
 
-struct addrinfo;
 class AddressInfoList;
 
 /**

@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -25,26 +25,20 @@
 #include "TagSongFilter.hxx"
 #include "ModifiedSinceSongFilter.hxx"
 #include "AudioFormatSongFilter.hxx"
-#include "LightSong.hxx"
-#include "AudioParser.hxx"
+#include "pcm/AudioParser.hxx"
 #include "tag/ParseName.hxx"
-#include "tag/Tag.hxx"
-#include "time/ChronoUtil.hxx"
 #include "time/ISO8601.hxx"
 #include "util/CharUtil.hxx"
 #include "util/ConstBuffer.hxx"
 #include "util/RuntimeError.hxx"
-#include "util/StringAPI.hxx"
 #include "util/StringCompare.hxx"
 #include "util/StringStrip.hxx"
 #include "util/StringView.hxx"
 #include "util/ASCII.hxx"
 #include "util/UriUtil.hxx"
-#include "lib/icu/CaseFold.hxx"
 
-#include <exception>
+#include <cassert>
 
-#include <assert.h>
 #include <stdlib.h>
 
 #define LOCATE_TAG_FILE_KEY     "file"
@@ -97,10 +91,8 @@ SongFilter::SongFilter(TagType tag, const char *value, bool fold_case)
 							   StringFilter(value, fold_case, fold_case, false)));
 }
 
-SongFilter::~SongFilter()
-{
-	/* this destructor exists here just so it won't get inlined */
-}
+/* this destructor exists here just so it won't get inlined */
+SongFilter::~SongFilter() = default;
 
 std::string
 SongFilter::ToExpression() const noexcept
@@ -475,9 +467,8 @@ SongFilter::GetBase() const noexcept
 }
 
 SongFilter
-SongFilter::WithoutBasePrefix(const char *_prefix) const noexcept
+SongFilter::WithoutBasePrefix(const std::string_view prefix) const noexcept
 {
-	const StringView prefix(_prefix);
 	SongFilter result;
 
 	for (const auto &i : and_filter.GetItems()) {

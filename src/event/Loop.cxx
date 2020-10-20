@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,10 +18,24 @@
  */
 
 #include "Loop.hxx"
+#include "TimerEvent.hxx"
 #include "SocketMonitor.hxx"
 #include "IdleMonitor.hxx"
 #include "DeferEvent.hxx"
 #include "util/ScopeExit.hxx"
+
+#ifdef HAVE_URING
+#include "UringManager.hxx"
+#include "util/PrintException.hxx"
+#include <stdio.h>
+#endif
+
+constexpr bool
+EventLoop::TimerCompare::operator()(const TimerEvent &a,
+				    const TimerEvent &b) const noexcept
+{
+	return a.due < b.due;
+}
 
 EventLoop::EventLoop(ThreadId _thread)
 	:SocketMonitor(*this),
@@ -43,6 +57,26 @@ EventLoop::~EventLoop() noexcept
 	assert(timers.empty());
 }
 
+#ifdef HAVE_URING
+
+Uring::Queue *
+EventLoop::GetUring() noexcept
+{
+	if (!uring_initialized) {
+		uring_initialized = true;
+		try {
+			uring = std::make_unique<Uring::Manager>(*this);
+		} catch (...) {
+			fprintf(stderr, "Failed to initialize io_uring: ");
+			PrintException(std::current_exception());
+		}
+	}
+
+	return uring.get();
+}
+
+#endif
+
 void
 EventLoop::Break() noexcept
 {
@@ -55,7 +89,7 @@ EventLoop::Break() noexcept
 bool
 EventLoop::Abandon(int _fd, SocketMonitor &m)  noexcept
 {
-	assert(IsInside());
+	assert(!IsAlive() || IsInside());
 
 	poll_result.Clear(&m);
 	return poll_group.Abandon(_fd);
@@ -64,7 +98,7 @@ EventLoop::Abandon(int _fd, SocketMonitor &m)  noexcept
 bool
 EventLoop::RemoveFD(int _fd, SocketMonitor &m) noexcept
 {
-	assert(IsInside());
+	assert(!IsAlive() || IsInside());
 
 	poll_result.Clear(&m);
 	return poll_group.Remove(_fd);
@@ -88,7 +122,7 @@ EventLoop::RemoveIdle(IdleMonitor &i) noexcept
 }
 
 void
-EventLoop::AddTimer(TimerEvent &t, std::chrono::steady_clock::duration d) noexcept
+EventLoop::AddTimer(TimerEvent &t, Event::Duration d) noexcept
 {
 	assert(IsInside());
 
@@ -97,18 +131,10 @@ EventLoop::AddTimer(TimerEvent &t, std::chrono::steady_clock::duration d) noexce
 	again = true;
 }
 
-void
-EventLoop::CancelTimer(TimerEvent &t) noexcept
-{
-	assert(IsInside());
-
-	timers.erase(timers.iterator_to(t));
-}
-
-inline std::chrono::steady_clock::duration
+inline Event::Duration
 EventLoop::HandleTimers() noexcept
 {
-	std::chrono::steady_clock::duration timeout;
+	Event::Duration timeout;
 
 	while (!quit) {
 		auto i = timers.begin();
@@ -125,7 +151,7 @@ EventLoop::HandleTimers() noexcept
 		t.Run();
 	}
 
-	return std::chrono::steady_clock::duration(-1);
+	return Event::Duration(-1);
 }
 
 /**
@@ -134,7 +160,7 @@ EventLoop::HandleTimers() noexcept
  * value (= never times out) is translated to the magic value -1.
  */
 static constexpr int
-ExportTimeoutMS(std::chrono::steady_clock::duration timeout)
+ExportTimeoutMS(Event::Duration timeout)
 {
 	return timeout >= timeout.zero()
 		/* round up (+1) to avoid unnecessary wakeups */
@@ -155,6 +181,15 @@ EventLoop::Run() noexcept
 
 	SocketMonitor::Schedule(SocketMonitor::READ);
 	AtScopeExit(this) {
+#ifdef HAVE_URING
+		/* make sure that the Uring::Manager gets destructed
+		   from within the EventThread, or else its
+		   destruction in another thread will cause assertion
+		   failures */
+		uring.reset();
+		uring_initialized = false;
+#endif
+
 		SocketMonitor::Cancel();
 	};
 
@@ -271,7 +306,7 @@ EventLoop::HandleDeferred() noexcept
 }
 
 bool
-EventLoop::OnSocketReady(gcc_unused unsigned flags) noexcept
+EventLoop::OnSocketReady([[maybe_unused]] unsigned flags) noexcept
 {
 	assert(IsInside());
 

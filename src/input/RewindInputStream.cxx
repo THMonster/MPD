@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,7 +20,8 @@
 #include "RewindInputStream.hxx"
 #include "ProxyInputStream.hxx"
 
-#include <assert.h>
+#include <cassert>
+
 #include <string.h>
 
 class RewindInputStream final : public ProxyInputStream {
@@ -56,25 +57,27 @@ public:
 			ProxyInputStream::Update();
 	}
 
-	bool IsEOF() noexcept override {
+	[[nodiscard]] bool IsEOF() const noexcept override {
 		return !ReadingFromBuffer() && ProxyInputStream::IsEOF();
 	}
 
-	size_t Read(void *ptr, size_t size) override;
-	void Seek(offset_type offset) override;
+	size_t Read(std::unique_lock<Mutex> &lock,
+		    void *ptr, size_t size) override;
+	void Seek(std::unique_lock<Mutex> &lock, offset_type offset) override;
 
 private:
 	/**
 	 * Are we currently reading from the buffer, and does the
 	 * buffer contain more data for the next read operation?
 	 */
-	bool ReadingFromBuffer() const noexcept {
+	[[nodiscard]] bool ReadingFromBuffer() const noexcept {
 		return tail > 0 && offset < input->GetOffset();
 	}
 };
 
 size_t
-RewindInputStream::Read(void *ptr, size_t read_size)
+RewindInputStream::Read(std::unique_lock<Mutex> &lock,
+			void *ptr, size_t read_size)
 {
 	if (ReadingFromBuffer()) {
 		/* buffered read */
@@ -93,7 +96,7 @@ RewindInputStream::Read(void *ptr, size_t read_size)
 	} else {
 		/* pass method call to underlying stream */
 
-		size_t nbytes = input->Read(ptr, read_size);
+		size_t nbytes = input->Read(lock, ptr, read_size);
 
 		if (input->GetOffset() > (offset_type)sizeof(buffer))
 			/* disable buffering */
@@ -114,7 +117,7 @@ RewindInputStream::Read(void *ptr, size_t read_size)
 }
 
 void
-RewindInputStream::Seek(offset_type new_offset)
+RewindInputStream::Seek(std::unique_lock<Mutex> &lock, offset_type new_offset)
 {
 	assert(IsReady());
 
@@ -132,7 +135,7 @@ RewindInputStream::Seek(offset_type new_offset)
 		   buffered range now */
 		tail = 0;
 
-		ProxyInputStream::Seek(new_offset);
+		ProxyInputStream::Seek(lock, new_offset);
 	}
 }
 

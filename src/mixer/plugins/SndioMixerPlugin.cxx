@@ -17,10 +17,7 @@
  */
 
 #include "mixer/MixerInternal.hxx"
-#include "mixer/Listener.hxx"
 #include "output/plugins/SndioOutputPlugin.hxx"
-
-#include <sndio.h>
 
 class SndioMixer final : public Mixer {
 	SndioOutput &output;
@@ -48,10 +45,10 @@ public:
 };
 
 static Mixer *
-sndio_mixer_init(gcc_unused EventLoop &event_loop,
+sndio_mixer_init([[maybe_unused]] EventLoop &event_loop,
 		AudioOutput &ao,
 		MixerListener &listener,
-		gcc_unused const ConfigBlock &block)
+		[[maybe_unused]] const ConfigBlock &block)
 {
 	return new SndioMixer((SndioOutput &)ao, listener);
 }

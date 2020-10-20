@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -22,11 +22,6 @@
 
 #include "util/Compiler.h"
 #include "Traits.hxx"
-#include "config.h"
-
-#if (defined(HAVE_ICU) || defined(HAVE_ICONV)) && !defined(_WIN32)
-#define HAVE_FS_CHARSET
-#endif
 
 /**
  * Gets file system character set name.
@@ -49,17 +44,15 @@ DeinitFSCharset() noexcept;
  *
  * Throws std::runtime_error on error.
  */
-gcc_nonnull_all
 PathTraitsUTF8::string
-PathToUTF8(PathTraitsFS::const_pointer_type path_fs);
+PathToUTF8(PathTraitsFS::string_view path_fs);
 
 /**
  * Convert the path from UTF-8.
  *
  * Throws std::runtime_error on error.
  */
-gcc_nonnull_all
 PathTraitsFS::string
-PathFromUTF8(PathTraitsUTF8::const_pointer_type path_utf8);
+PathFromUTF8(PathTraitsUTF8::string_view path_utf8);
 
 #endif

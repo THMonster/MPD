@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,7 +21,6 @@
  * CD-Audio handling (requires libcdio_paranoia)
  */
 
-#include "config.h"
 #include "CdioParanoiaInputPlugin.hxx"
 #include "lib/cdio/Paranoia.hxx"
 #include "../InputStream.hxx"
@@ -34,13 +33,13 @@
 #include "fs/AllocatedPath.hxx"
 #include "Log.hxx"
 #include "config/Block.hxx"
-#include "config/Domain.hxx"
+
+#include <cassert>
+#include <cstdint>
 
 #include <stdio.h>
-#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
-#include <assert.h>
 
 #include <cdio/cd_types.h>
 
@@ -83,16 +82,17 @@ class CdioParanoiaInputStream final : public InputStream {
 		SetReady();
 	}
 
-	~CdioParanoiaInputStream() {
+	~CdioParanoiaInputStream() override {
 		para = {};
 		cdio_cddap_close_no_free_cdio(drv);
 		cdio_destroy(cdio);
 	}
 
 	/* virtual methods from InputStream */
-	bool IsEOF() noexcept override;
-	size_t Read(void *ptr, size_t size) override;
-	void Seek(offset_type offset) override;
+	[[nodiscard]] bool IsEOF() const noexcept override;
+	size_t Read(std::unique_lock<Mutex> &lock,
+		    void *ptr, size_t size) override;
+	void Seek(std::unique_lock<Mutex> &lock, offset_type offset) override;
 };
 
 static constexpr Domain cdio_domain("cdio");
@@ -133,7 +133,7 @@ parse_cdio_uri(const char *src)
 		return dest;
 	}
 
-	const char *slash = strrchr(src, '/');
+	const char *slash = std::strrchr(src, '/');
 	if (slash == nullptr) {
 		/* play the whole CD in the specified drive */
 		CopyTruncateString(dest.device, src, sizeof(dest.device));
@@ -163,7 +163,7 @@ parse_cdio_uri(const char *src)
 }
 
 static AllocatedPath
-cdio_detect_device(void)
+cdio_detect_device()
 {
 	char **devices = cdio_get_devices_with_cap(nullptr, CDIO_FS_AUDIO,
 						   false);
@@ -255,7 +255,8 @@ input_cdio_open(const char *uri,
 }
 
 void
-CdioParanoiaInputStream::Seek(offset_type new_offset)
+CdioParanoiaInputStream::Seek(std::unique_lock<Mutex> &,
+			      offset_type new_offset)
 {
 	if (new_offset > size)
 		throw FormatRuntimeError("Invalid offset to seek %ld (%ld)",
@@ -276,7 +277,8 @@ CdioParanoiaInputStream::Seek(offset_type new_offset)
 }
 
 size_t
-CdioParanoiaInputStream::Read(void *ptr, size_t length)
+CdioParanoiaInputStream::Read(std::unique_lock<Mutex> &,
+			      void *ptr, size_t length)
 {
 	size_t nbytes = 0;
 	char *wptr = (char *) ptr;
@@ -337,7 +339,7 @@ CdioParanoiaInputStream::Read(void *ptr, size_t length)
 }
 
 bool
-CdioParanoiaInputStream::IsEOF() noexcept
+CdioParanoiaInputStream::IsEOF() const noexcept
 {
 	return lsn_from + lsn_relofs > lsn_to;
 }
@@ -353,4 +355,5 @@ const InputPlugin input_plugin_cdio_paranoia = {
 	input_cdio_init,
 	nullptr,
 	input_cdio_open,
+	nullptr
 };

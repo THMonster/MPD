@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -50,7 +50,7 @@ template<typename T>
 static auto
 Append(std::forward_list<T> &list, T &&src)
 {
-	return list.emplace_after(FindLast(list), std::move(src));
+	return list.emplace_after(FindLast(list), std::forward<T>(src));
 }
 
 void
@@ -84,61 +84,63 @@ ConfigData::GetPath(ConfigOption option) const
 unsigned
 ConfigData::GetUnsigned(ConfigOption option, unsigned default_value) const
 {
-	const auto *param = GetParam(option);
-	long value;
-	char *endptr;
-
-	if (param == nullptr)
-		return default_value;
-
-	const char *const s = param->value.c_str();
-	value = strtol(s, &endptr, 0);
-	if (endptr == s || *endptr != 0 || value < 0)
-		throw FormatRuntimeError("Not a valid non-negative number in line %i",
-					 param->line);
-
-	return (unsigned)value;
+	return With(option, [default_value](const char *s){
+		return s != nullptr
+			? ParseUnsigned(s)
+			: default_value;
+	});
 }
 
 unsigned
 ConfigData::GetPositive(ConfigOption option, unsigned default_value) const
 {
-	const auto *param = GetParam(option);
-	long value;
-	char *endptr;
+	return With(option, [default_value](const char *s){
+		return s != nullptr
+			? ParsePositive(s)
+			: default_value;
+	});
+}
 
-	if (param == nullptr)
-		return default_value;
+std::chrono::steady_clock::duration
+ConfigData::GetUnsigned(ConfigOption option,
+			std::chrono::steady_clock::duration default_value) const
+{
+	return With(option, [default_value](const char *s){
+		if (s == nullptr)
+			return default_value;
 
-	const char *const s = param->value.c_str();
-	value = strtol(s, &endptr, 0);
-	if (endptr == s || *endptr != 0)
-		throw FormatRuntimeError("Not a valid number in line %i",
-					 param->line);
+		auto value = ParseDuration(s);
+		if (value < std::chrono::steady_clock::duration{})
+			throw std::runtime_error("Value must not be negative");
 
-	if (value <= 0)
-		throw FormatRuntimeError("Not a positive number in line %i",
-					 param->line);
+		return value;
+	});
+}
 
-	return (unsigned)value;
+std::chrono::steady_clock::duration
+ConfigData::GetPositive(ConfigOption option,
+			std::chrono::steady_clock::duration default_value) const
+{
+	return With(option, [default_value](const char *s){
+		if (s == nullptr)
+			return default_value;
+
+		auto value = ParseDuration(s);
+		if (value <= std::chrono::steady_clock::duration{})
+			throw std::runtime_error("Value must be positive");
+
+		return value;
+	});
 }
 
 bool
 ConfigData::GetBool(ConfigOption option, bool default_value) const
 {
-	const auto *param = GetParam(option);
-	bool success, value;
-
-	if (param == nullptr)
-		return default_value;
-
-	success = get_bool(param->value.c_str(), &value);
-	if (!success)
-		throw FormatRuntimeError("Expected boolean value (yes, true, 1) or "
-					 "(no, false, 0) on line %i\n",
-					 param->line);
-
-	return value;
+	return With(option, [default_value](const char *s){
+		return s != nullptr
+			? ParseBool(s)
+			: default_value;
+	});
 }
 
 ConfigBlock &

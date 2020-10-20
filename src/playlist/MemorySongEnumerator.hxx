@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -22,7 +22,6 @@
 
 #include "SongEnumerator.hxx"
 #include "song/DetachedSong.hxx"
-#include "util/Compiler.h"
 
 #include <forward_list>
 
@@ -33,7 +32,7 @@ public:
 	MemorySongEnumerator(std::forward_list<DetachedSong> &&_songs)
 		:songs(std::move(_songs)) {}
 
-	virtual std::unique_ptr<DetachedSong> NextSong() override;
+	std::unique_ptr<DetachedSong> NextSong() override;
 };
 
 #endif

@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,16 +24,16 @@
 #include "event/Thread.hxx"
 #include "fs/Path.hxx"
 #include "fs/NarrowPath.hxx"
-#include "AudioParser.hxx"
-#include "pcm/PcmConvert.hxx"
+#include "pcm/AudioParser.hxx"
+#include "pcm/AudioFormat.hxx"
 #include "util/StringBuffer.hxx"
 #include "util/RuntimeError.hxx"
 #include "util/ScopeExit.hxx"
 #include "util/PrintException.hxx"
 
+#include <cassert>
 #include <memory>
 
-#include <assert.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>

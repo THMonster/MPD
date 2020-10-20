@@ -32,7 +32,7 @@
 
 #include "util/Compiler.h"
 
-#include <system_error>
+#include <system_error> // IWYU pragma: export
 #include <utility>
 
 #include <stdio.h>
@@ -92,7 +92,8 @@ FormatLastError(const char *fmt, Args&&... args) noexcept
 
 #endif /* _WIN32 */
 
-#include <errno.h>
+#include <cerrno> // IWYU pragma: export
+
 #include <string.h>
 
 /**

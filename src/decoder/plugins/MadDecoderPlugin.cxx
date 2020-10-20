@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -26,7 +26,7 @@
 #include "tag/Handler.hxx"
 #include "tag/ReplayGain.hxx"
 #include "tag/MixRamp.hxx"
-#include "CheckAudioFormat.hxx"
+#include "pcm/CheckAudioFormat.hxx"
 #include "util/Clamp.hxx"
 #include "util/StringCompare.hxx"
 #include "util/Domain.hxx"
@@ -39,7 +39,8 @@
 #include <id3tag.h>
 #endif
 
-#include <assert.h>
+#include <cassert>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -62,11 +63,7 @@ enum class MadDecoderMuteFrame {
 /* the number of samples of silence the decoder inserts at start */
 static constexpr unsigned DECODERDELAY = 529;
 
-static constexpr bool DEFAULT_GAPLESS_MP3_PLAYBACK = true;
-
 static constexpr Domain mad_domain("mad");
-
-static bool gapless_playback;
 
 gcc_const
 static SongTime
@@ -98,14 +95,6 @@ mad_fixed_to_24_buffer(int32_t *dest, const struct mad_pcm &src,
 	for (size_t i = start; i < end; ++i)
 		for (unsigned c = 0; c < num_channels; ++c)
 			*dest++ = mad_fixed_to_24_sample(src.samples[c][i]);
-}
-
-static bool
-mad_plugin_init(const ConfigBlock &block)
-{
-	gapless_playback = block.GetBlockValue("gapless",
-					       DEFAULT_GAPLESS_MP3_PLAYBACK);
-	return true;
 }
 
 class MadDecoder {
@@ -156,13 +145,12 @@ private:
 	bool Seek(long offset) noexcept;
 	bool FillBuffer() noexcept;
 	void ParseId3(size_t tagsize, Tag *tag) noexcept;
-	MadDecoderAction DecodeNextFrameHeader(Tag *tag) noexcept;
-	MadDecoderAction DecodeNextFrame() noexcept;
+	MadDecoderAction DecodeNextFrame(bool skip, Tag *tag) noexcept;
 
-	gcc_pure
+	[[nodiscard]] gcc_pure
 	offset_type ThisFrameOffset() const noexcept;
 
-	gcc_pure
+	[[nodiscard]] gcc_pure
 	offset_type RestIncludingThisFrame() const noexcept;
 
 	/**
@@ -181,7 +169,7 @@ private:
 		times = new mad_timer_t[max_frames];
 	}
 
-	gcc_pure
+	[[nodiscard]] gcc_pure
 	size_t TimeToFrame(SongTime t) const noexcept;
 
 	/**
@@ -390,8 +378,6 @@ RecoverFrameError(const struct mad_stream &stream) noexcept
 {
 	if (MAD_RECOVERABLE(stream.error))
 		return MadDecoderAction::SKIP;
-	else if (stream.error == MAD_ERROR_BUFLEN)
-		return MadDecoderAction::CONT;
 
 	FormatWarning(mad_domain,
 		      "unrecoverable frame level error: %s",
@@ -400,13 +386,16 @@ RecoverFrameError(const struct mad_stream &stream) noexcept
 }
 
 MadDecoderAction
-MadDecoder::DecodeNextFrameHeader(Tag *tag) noexcept
+MadDecoder::DecodeNextFrame(bool skip, Tag *tag) noexcept
 {
 	if ((stream.buffer == nullptr || stream.error == MAD_ERROR_BUFLEN) &&
 	    !FillBuffer())
 		return MadDecoderAction::BREAK;
 
 	if (mad_header_decode(&frame.header, &stream)) {
+		if (stream.error == MAD_ERROR_BUFLEN)
+			return MadDecoderAction::CONT;
+
 		if (stream.error == MAD_ERROR_LOSTSYNC && stream.this_frame) {
 			signed long tagsize = id3_tag_query(stream.this_frame,
 							    stream.bufend -
@@ -434,29 +423,8 @@ MadDecoder::DecodeNextFrameHeader(Tag *tag) noexcept
 		return MadDecoderAction::SKIP;
 	}
 
-	return MadDecoderAction::OK;
-}
-
-MadDecoderAction
-MadDecoder::DecodeNextFrame() noexcept
-{
-	if ((stream.buffer == nullptr || stream.error == MAD_ERROR_BUFLEN) &&
-	    !FillBuffer())
-		return MadDecoderAction::BREAK;
-
-	if (mad_frame_decode(&frame, &stream)) {
-		if (stream.error == MAD_ERROR_LOSTSYNC) {
-			signed long tagsize = id3_tag_query(stream.this_frame,
-							    stream.bufend -
-							    stream.this_frame);
-			if (tagsize > 0) {
-				mad_stream_skip(&stream, tagsize);
-				return MadDecoderAction::CONT;
-			}
-		}
-
+	if (!skip && mad_frame_decode(&frame, &stream))
 		return RecoverFrameError(stream);
-	}
 
 	return MadDecoderAction::OK;
 }
@@ -549,8 +517,8 @@ parse_xing(struct xing *xing, struct mad_bitptr *ptr, int *oldbitlen) noexcept
 	if (xing->flags & XING_TOC) {
 		if (bitlen < 800)
 			return false;
-		for (unsigned i = 0; i < 100; ++i)
-			xing->toc[i] = mad_bit_read(ptr, 8);
+		for (unsigned char & i : xing->toc)
+			i = mad_bit_read(ptr, 8);
 		bitlen -= 800;
 	}
 
@@ -725,20 +693,20 @@ MadDecoder::DecodeFirstFrame(Tag *tag) noexcept
 #endif
 
 	while (true) {
-		MadDecoderAction ret;
-		do {
-			ret = DecodeNextFrameHeader(tag);
-		} while (ret == MadDecoderAction::CONT);
-		if (ret == MadDecoderAction::BREAK)
-			return false;
-		if (ret == MadDecoderAction::SKIP) continue;
+		const auto action = DecodeNextFrame(false, tag);
+		switch (action) {
+		case MadDecoderAction::SKIP:
+		case MadDecoderAction::CONT:
+			continue;
 
-		do {
-			ret = DecodeNextFrame();
-		} while (ret == MadDecoderAction::CONT);
-		if (ret == MadDecoderAction::BREAK)
+		case MadDecoderAction::BREAK:
 			return false;
-		if (ret == MadDecoderAction::OK) break;
+
+		case MadDecoderAction::OK:
+			break;
+		}
+
+		break;
 	}
 
 	struct mad_bitptr ptr = stream.anc_ptr;
@@ -761,7 +729,7 @@ MadDecoder::DecodeFirstFrame(Tag *tag) noexcept
 
 		struct lame lame;
 		if (parse_lame(&lame, &ptr, &bitlen)) {
-			if (gapless_playback && input_stream.IsSeekable()) {
+			if (input_stream.IsSeekable()) {
 				/* libmad inserts 529 samples of
 				   silence at the beginning and
 				   removes those 529 samples at the
@@ -962,31 +930,25 @@ inline bool
 MadDecoder::LoadNextFrame() noexcept
 {
 	while (true) {
-		MadDecoderAction ret;
-		do {
-			Tag tag;
+		Tag tag;
 
-			ret = DecodeNextFrameHeader(&tag);
+		const auto action =
+			DecodeNextFrame(mute_frame != MadDecoderMuteFrame::NONE,
+					&tag);
+		if (!tag.IsEmpty())
+			client->SubmitTag(input_stream, std::move(tag));
 
-			if (!tag.IsEmpty())
-				client->SubmitTag(input_stream,
-						  std::move(tag));
-		} while (ret == MadDecoderAction::CONT);
-		if (ret == MadDecoderAction::BREAK)
+		switch (action) {
+		case MadDecoderAction::SKIP:
+		case MadDecoderAction::CONT:
+			continue;
+
+		case MadDecoderAction::BREAK:
 			return false;
 
-		const bool skip = ret == MadDecoderAction::SKIP;
-
-		if (mute_frame == MadDecoderMuteFrame::NONE) {
-			do {
-				ret = DecodeNextFrame();
-			} while (ret == MadDecoderAction::CONT);
-			if (ret == MadDecoderAction::BREAK)
-				return false;
-		}
-
-		if (!skip && ret == MadDecoderAction::OK)
+		case MadDecoderAction::OK:
 			return true;
+		}
 	}
 }
 
@@ -1060,15 +1022,7 @@ mad_decoder_scan_stream(InputStream &is, TagHandler &handler)
 static const char *const mad_suffixes[] = { "mp3", "mp2", nullptr };
 static const char *const mad_mime_types[] = { "audio/mpeg", nullptr };
 
-const struct DecoderPlugin mad_decoder_plugin = {
-	"mad",
-	mad_plugin_init,
-	nullptr,
-	mad_decode,
-	nullptr,
-	nullptr,
-	mad_decoder_scan_stream,
-	nullptr,
-	mad_suffixes,
-	mad_mime_types,
-};
+constexpr DecoderPlugin mad_decoder_plugin =
+	DecoderPlugin("mad", mad_decode, mad_decoder_scan_stream)
+	.WithSuffixes(mad_suffixes)
+	.WithMimeTypes(mad_mime_types);

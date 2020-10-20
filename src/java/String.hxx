@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 Max Kellermann <max.kellermann@gmail.com>
+ * Copyright 2010-2019 Max Kellermann <max.kellermann@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,7 +34,8 @@
 
 #include <jni.h>
 
-#include <stddef.h>
+#include <cstddef>
+#include <string>
 
 namespace Java {
 	/**
@@ -68,6 +69,12 @@ namespace Java {
 		char *CopyTo(JNIEnv *env,
 			     char *buffer, size_t max_size) noexcept {
 			return CopyTo(env, Get(), buffer, max_size);
+		}
+
+		static std::string ToString(JNIEnv *env, jstring s) noexcept;
+
+		std::string ToString() const noexcept {
+			return ToString(GetEnv(), Get());
 		}
 	};
 }

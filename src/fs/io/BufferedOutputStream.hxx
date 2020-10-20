@@ -33,7 +33,7 @@
 #include "util/Compiler.h"
 #include "util/DynamicFifoBuffer.hxx"
 
-#include <stddef.h>
+#include <cstddef>
 
 #ifdef _UNICODE
 #include <wchar.h>
@@ -53,7 +53,7 @@ class BufferedOutputStream {
 	DynamicFifoBuffer<char> buffer;
 
 public:
-	explicit BufferedOutputStream(OutputStream &_os)
+	explicit BufferedOutputStream(OutputStream &_os) noexcept
 		:os(_os), buffer(32768) {}
 
 	void Write(const void *data, size_t size);

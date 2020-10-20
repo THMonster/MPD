@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,20 +21,17 @@
 #include "Daemon.hxx"
 #include "system/Error.hxx"
 #include "fs/AllocatedPath.hxx"
-#include "fs/FileSystem.hxx"
 #include "util/RuntimeError.hxx"
 
 #ifndef _WIN32
 #include "PidFile.hxx"
 #endif
 
-#include <stdlib.h>
-#include <unistd.h>
 #include <fcntl.h>
 
 #ifndef _WIN32
+#include <csignal>
 #include <sys/wait.h>
-#include <signal.h>
 #include <pwd.h>
 #include <grp.h>
 #endif
@@ -67,7 +64,7 @@ static bool had_group = false;
 static int detach_fd = -1;
 
 void
-daemonize_kill(void)
+daemonize_kill()
 {
 	if (pidfile.IsNull())
 		throw std::runtime_error("no pid_file specified in the config file");
@@ -82,18 +79,18 @@ daemonize_kill(void)
 	if (kill(pid, SIGTERM) < 0)
 		throw FormatErrno("unable to kill process %i", int(pid));
 
-	exit(EXIT_SUCCESS);
+	std::exit(EXIT_SUCCESS);
 }
 
 void
-daemonize_close_stdin(void)
+daemonize_close_stdin()
 {
 	close(STDIN_FILENO);
 	open("/dev/null", O_RDONLY);
 }
 
 void
-daemonize_set_user(void)
+daemonize_set_user()
 {
 	if (user_name == nullptr)
 		return;
@@ -181,7 +178,7 @@ daemonize_begin(bool detach)
 	if (nbytes == (ssize_t)sizeof(result)) {
 		/* the child process was successful */
 		pidfile2.Write(pid);
-		exit(EXIT_SUCCESS);
+		std::exit(EXIT_SUCCESS);
 	}
 
 	/* something bad happened in the child process */
@@ -197,7 +194,7 @@ daemonize_begin(bool detach)
 		throw FormatErrno("MPD died from signal %d%s", WTERMSIG(status),
 				  WCOREDUMP(status) ? " (core dumped)" : "");
 
-	exit(WEXITSTATUS(status));
+	std::exit(WEXITSTATUS(status));
 }
 
 void
@@ -246,7 +243,7 @@ daemonize_init(const char *user, const char *group, AllocatedPath &&_pidfile)
 }
 
 void
-daemonize_finish(void)
+daemonize_finish()
 {
 	if (!pidfile.IsNull()) {
 		unlink(pidfile.c_str());

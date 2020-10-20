@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -17,26 +17,21 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-/*
- * Functions for dealing with all configured (enabled) audion outputs
- * at once.
- *
- */
-
 #ifndef OUTPUT_ALL_H
 #define OUTPUT_ALL_H
 
 #include "Control.hxx"
 #include "MusicChunkPtr.hxx"
 #include "player/Outputs.hxx"
-#include "AudioFormat.hxx"
+#include "pcm/AudioFormat.hxx"
 #include "ReplayGainMode.hxx"
 #include "Chrono.hxx"
 #include "util/Compiler.h"
 
+#include <algorithm>
+#include <cassert>
+#include <memory>
 #include <vector>
-
-#include <assert.h>
 
 class MusicPipe;
 class EventLoop;
@@ -45,10 +40,16 @@ class AudioOutputClient;
 struct ConfigData;
 struct ReplayGainConfig;
 
+/*
+ * Wrap multiple #AudioOutputControl objects a single interface which
+ * keeps them synchronized.
+ */
 class MultipleOutputs final : public PlayerOutputs {
+	AudioOutputClient &client;
+
 	MixerListener &mixer_listener;
 
-	std::vector<AudioOutputControl *> outputs;
+	std::vector<std::unique_ptr<AudioOutputControl>> outputs;
 
 	AudioFormat input_audio_format = AudioFormat::Undefined();
 
@@ -69,17 +70,13 @@ public:
 	 * Load audio outputs from the configuration file and
 	 * initialize them.
 	 */
-	MultipleOutputs(MixerListener &_mixer_listener) noexcept;
+	MultipleOutputs(AudioOutputClient &_client,
+			MixerListener &_mixer_listener) noexcept;
 	~MultipleOutputs() noexcept;
 
 	void Configure(EventLoop &event_loop,
 		       const ConfigData &config,
-		       const ReplayGainConfig &replay_gain_config,
-		       AudioOutputClient &client);
-
-	void AddNullOutput(EventLoop &event_loop,
-			   const ReplayGainConfig &replay_gain_config,
-			   AudioOutputClient &client);
+		       const ReplayGainConfig &replay_gain_config);
 
 	/**
 	 * Returns the total number of audio output devices, including
@@ -106,11 +103,30 @@ public:
 	}
 
 	/**
+	 * Are all outputs dummy?
+	 */
+	gcc_pure
+	bool IsDummy() const noexcept {
+		return std::all_of(outputs.begin(), outputs.end(), [](const auto &i) { return i->IsDummy(); });
+	}
+
+	/**
 	 * Returns the audio output device with the specified name.
 	 * Returns nullptr if the name does not exist.
 	 */
 	gcc_pure
 	AudioOutputControl *FindByName(const char *name) noexcept;
+
+	/**
+	 * Does an audio output device with this name exist?
+	 */
+	gcc_pure
+	bool HasName(const char *name) noexcept {
+		return FindByName(name) != nullptr;
+	}
+
+	void Add(std::unique_ptr<FilteredAudioOutput> output,
+		 bool enable) noexcept;
 
 	void SetReplayGainMode(ReplayGainMode mode) noexcept;
 
@@ -147,6 +163,15 @@ public:
 
 private:
 	/**
+	 * Was Open() called successfully?
+	 *
+	 * This method may only be called from the player thread.
+	 */
+	bool IsOpen() const noexcept {
+		return input_audio_format.IsDefined();
+	}
+
+	/**
 	 * Wait until all (active) outputs have finished the current
 	 * command.
 	 */
@@ -169,13 +194,6 @@ private:
 	 * Has this chunk been consumed by all audio outputs?
 	 */
 	bool IsChunkConsumed(const MusicChunk *chunk) const noexcept;
-
-	/**
-	 * There's only one chunk left in the pipe (#pipe), and all
-	 * audio outputs have consumed it already.  Clear the
-	 * reference.
-	 */
-	void ClearTailChunk(const MusicChunk *chunk, bool *locked) noexcept;
 
 	/* virtual methods from class PlayerOutputs */
 	void EnableDisable() override;

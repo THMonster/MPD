@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,8 +23,14 @@
 #include "fs/AllocatedPath.hxx"
 #include "util/RuntimeError.hxx"
 
-#include <assert.h>
 #include <stdlib.h>
+
+void
+BlockParam::ThrowWithNested() const
+{
+	std::throw_with_nested(FormatRuntimeError("Error in setting \"%s\" on line %i",
+						  name.c_str(), line));
+}
 
 int
 BlockParam::GetIntValue() const
@@ -41,40 +47,19 @@ BlockParam::GetIntValue() const
 unsigned
 BlockParam::GetUnsignedValue() const
 {
-	const char *const s = value.c_str();
-	char *endptr;
-	unsigned long value2 = strtoul(s, &endptr, 0);
-	if (endptr == s || *endptr != 0)
-		throw FormatRuntimeError("Not a valid number in line %i", line);
-
-	return (unsigned)value2;
+	return With(ParseUnsigned);
 }
 
 unsigned
 BlockParam::GetPositiveValue() const
 {
-	const char *const s = value.c_str();
-	char *endptr;
-	unsigned long value2 = strtoul(s, &endptr, 0);
-	if (endptr == s || *endptr != 0)
-		throw FormatRuntimeError("Not a valid number in line %i", line);
-
-	if (value2 <= 0)
-		throw FormatRuntimeError("Number in line %i must be positive", line);
-
-	return (unsigned)value2;
+	return With(ParsePositive);
 }
 
 bool
 BlockParam::GetBoolValue() const
 {
-	bool value2;
-	if (!get_bool(value.c_str(), &value2))
-		throw FormatRuntimeError("%s is not a boolean value (yes, true, 1) or "
-					 "(no, false, 0) on line %i\n",
-					 name.c_str(), line);
-
-	return value2;
+	return With(ParseBool);
 }
 
 const BlockParam *

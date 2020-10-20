@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,14 +21,7 @@
 #include "Loop.hxx"
 
 void
-TimerEvent::Cancel() noexcept
-{
-	if (IsActive())
-		loop.CancelTimer(*this);
-}
-
-void
-TimerEvent::Schedule(std::chrono::steady_clock::duration d) noexcept
+TimerEvent::Schedule(Event::Duration d) noexcept
 {
 	Cancel();
 

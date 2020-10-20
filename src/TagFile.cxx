@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -27,9 +27,7 @@
 #include "input/InputStream.hxx"
 #include "input/LocalOpen.hxx"
 
-#include <exception>
-
-#include <assert.h>
+#include <cassert>
 
 class TagFileScan {
 	const Path path_fs;
@@ -47,7 +45,7 @@ public:
 		 handler(_handler),
 		 is(nullptr) {}
 
-	bool ScanFile(const DecoderPlugin &plugin) {
+	bool ScanFile(const DecoderPlugin &plugin) noexcept {
 		return plugin.ScanFile(path_fs, handler);
 	}
 
@@ -57,16 +55,9 @@ public:
 
 		/* open the InputStream (if not already open) */
 		if (is == nullptr) {
-			try {
-				is = OpenLocalInputStream(path_fs, mutex);
-			} catch (...) {
-				return false;
-			}
+			is = OpenLocalInputStream(path_fs, mutex);
 		} else {
-			try {
-				is->LockRewind();
-			} catch (...) {
-			}
+			is->LockRewind();
 		}
 
 		/* now try the stream_tag() method */

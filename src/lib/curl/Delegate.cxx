@@ -30,7 +30,8 @@
 #include "Delegate.hxx"
 #include "Parser.hxx"
 
-#include <assert.h>
+#include <cassert>
+#include <utility>
 
 void
 DelegateCurlResponseHandler::OnHeaders(unsigned status,

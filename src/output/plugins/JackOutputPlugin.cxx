@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,7 +20,9 @@
 #include "config.h"
 #include "JackOutputPlugin.hxx"
 #include "../OutputAPI.hxx"
-#include "config/Domain.hxx"
+#include "../Error.hxx"
+#include "output/Features.h"
+#include "thread/Mutex.hxx"
 #include "util/ScopeExit.hxx"
 #include "util/ConstBuffer.hxx"
 #include "util/IterableSplitString.hxx"
@@ -29,8 +31,7 @@
 #include "Log.hxx"
 
 #include <atomic>
-
-#include <assert.h>
+#include <cassert>
 
 #include <jack/jack.h>
 #include <jack/types.h>
@@ -43,7 +44,7 @@ static constexpr unsigned MAX_PORTS = 16;
 
 static constexpr size_t jack_sample_size = sizeof(jack_default_audio_sample_t);
 
-struct JackOutput final : AudioOutput {
+class JackOutput final : public AudioOutput {
 	/**
 	 * libjack options passed to jack_client_open().
 	 */
@@ -60,6 +61,8 @@ struct JackOutput final : AudioOutput {
 
 	std::string destination_ports[MAX_PORTS];
 	unsigned num_destination_ports;
+	/* overrides num_destination_ports*/
+	bool auto_destination_ports;
 
 	size_t ringbuffer_size;
 
@@ -71,21 +74,40 @@ struct JackOutput final : AudioOutput {
 	jack_client_t *client;
 	jack_ringbuffer_t *ringbuffer[MAX_PORTS];
 
-	std::atomic_bool shutdown;
-
 	/**
 	 * While this flag is set, the "process" callback generates
 	 * silence.
 	 */
 	std::atomic_bool pause;
 
+	/**
+	 * Was Interrupt() called?  This will unblock Play().  It will
+	 * be reset by Cancel() and Pause(), as documented by the
+	 * #AudioOutput interface.
+	 *
+	 * Only initialized while the output is open.
+	 */
+	bool interrupted;
+
+	/**
+	 * Protects #error.
+	 */
+	mutable Mutex mutex;
+
+	/**
+	 * The error reported to the "on_info_shutdown" callback.
+	 */
+	std::exception_ptr error;
+
+public:
 	explicit JackOutput(const ConfigBlock &block);
 
+private:
 	/**
 	 * Connect the JACK client and performs some basic setup
 	 * (e.g. register callbacks).
 	 *
-	 * Throws #std::runtime_error on error.
+	 * Throws on error.
 	 */
 	void Connect();
 
@@ -94,12 +116,21 @@ struct JackOutput final : AudioOutput {
 	 */
 	void Disconnect() noexcept;
 
-	void Shutdown() noexcept {
-		shutdown = true;
+	void Shutdown(const char *reason) noexcept {
+		const std::lock_guard<Mutex> lock(mutex);
+		error = std::make_exception_ptr(FormatRuntimeError("JACK connection shutdown: %s",
+								   reason));
 	}
 
+	static void OnShutdown(jack_status_t, const char *reason,
+			       void *arg) noexcept {
+		auto &j = *(JackOutput *)arg;
+		j.Shutdown(reason);
+	}
+
+
 	/**
-	 * Throws #std::runtime_error on error.
+	 * Throws on error.
 	 */
 	void Start();
 	void Stop() noexcept;
@@ -112,12 +143,18 @@ struct JackOutput final : AudioOutput {
 	jack_nframes_t GetAvailable() const noexcept;
 
 	void Process(jack_nframes_t nframes);
+	static int Process(jack_nframes_t nframes, void *arg) noexcept {
+		auto &j = *(JackOutput *)arg;
+		j.Process(nframes);
+		return 0;
+	}
 
 	/**
 	 * @return the number of frames that were written
 	 */
 	size_t WriteSamples(const float *src, size_t n_frames);
 
+public:
 	/* virtual methods from class AudioOutput */
 
 	void Enable() override;
@@ -129,21 +166,30 @@ struct JackOutput final : AudioOutput {
 		Stop();
 	}
 
+	void Interrupt() noexcept override;
+
 	std::chrono::steady_clock::duration Delay() const noexcept override {
-		return pause && !shutdown
+		return pause && !LockWasShutdown()
 			? std::chrono::seconds(1)
 			: std::chrono::steady_clock::duration::zero();
 	}
 
 	size_t Play(const void *chunk, size_t size) override;
 
+	void Cancel() noexcept override;
 	bool Pause() override;
+
+private:
+	bool LockWasShutdown() const noexcept {
+		const std::lock_guard<Mutex> lock(mutex);
+		return !!error;
+	}
 };
 
 static constexpr Domain jack_output_domain("jack_output");
 
 /**
- * Throws #std::runtime_error on error.
+ * Throws on error.
  */
 static unsigned
 parse_port_list(const char *source, std::string dest[])
@@ -204,6 +250,8 @@ JackOutput::JackOutput(const ConfigBlock &block)
 		num_destination_ports = 0;
 	}
 
+	auto_destination_ports = block.GetBlockValue("auto_destination_ports", true);
+
 	if (num_destination_ports > 0 &&
 	    num_destination_ports != num_source_ports)
 		FormatWarning(jack_output_domain,
@@ -248,7 +296,7 @@ MultiReadAdvance(ConstBuffer<jack_ringbuffer_t *> buffers,
 static void
 WriteSilence(jack_port_t &port, jack_nframes_t nframes)
 {
-	jack_default_audio_sample_t *out =
+	auto *out =
 		(jack_default_audio_sample_t *)
 		jack_port_get_buffer(&port, nframes);
 	if (out == nullptr)
@@ -278,7 +326,7 @@ static void
 Copy(jack_port_t &dest, jack_nframes_t nframes,
      jack_ringbuffer_t &src, jack_nframes_t available)
 {
-	jack_default_audio_sample_t *out =
+	auto *out =
 		(jack_default_audio_sample_t *)
 		jack_port_get_buffer(&dest, nframes);
 	if (out == nullptr)
@@ -331,39 +379,6 @@ JackOutput::Process(jack_nframes_t nframes)
 			  nframes);
 }
 
-static int
-mpd_jack_process(jack_nframes_t nframes, void *arg)
-{
-	JackOutput &jo = *(JackOutput *) arg;
-
-	jo.Process(nframes);
-	return 0;
-}
-
-static void
-mpd_jack_shutdown(void *arg)
-{
-	JackOutput &jo = *(JackOutput *) arg;
-
-	jo.Shutdown();
-}
-
-static void
-set_audioformat(JackOutput *jd, AudioFormat &audio_format)
-{
-	audio_format.sample_rate = jack_get_sample_rate(jd->client);
-
-	if (jd->num_source_ports == 1)
-		audio_format.channels = 1;
-	else if (audio_format.channels > jd->num_source_ports)
-		audio_format.channels = 2;
-
-	/* JACK uses 32 bit float in the range [-1 .. 1] - just like
-	   MPD's SampleFormat::FLOAT*/
-	static_assert(jack_sample_size == sizeof(float), "Expected float32");
-	audio_format.format = SampleFormat::FLOAT;
-}
-
 static void
 mpd_jack_error(const char *msg)
 {
@@ -374,7 +389,7 @@ mpd_jack_error(const char *msg)
 static void
 mpd_jack_info(const char *msg)
 {
-	LogDefault(jack_output_domain, msg);
+	LogNotice(jack_output_domain, msg);
 }
 #endif
 
@@ -391,7 +406,7 @@ JackOutput::Disconnect() noexcept
 void
 JackOutput::Connect()
 {
-	shutdown = false;
+	error = {};
 
 	jack_status_t status;
 	client = jack_client_open(name, options, &status, server_name);
@@ -399,8 +414,8 @@ JackOutput::Connect()
 		throw FormatRuntimeError("Failed to connect to JACK server, status=%d",
 					 status);
 
-	jack_set_process_callback(client, mpd_jack_process, this);
-	jack_on_shutdown(client, mpd_jack_shutdown, this);
+	jack_set_process_callback(client, Process, this);
+	jack_on_info_shutdown(client, OnShutdown, this);
 
 	for (unsigned i = 0; i < num_source_ports; ++i) {
 		unsigned long portflags = JackPortIsOutput | JackPortIsTerminal;
@@ -417,7 +432,7 @@ JackOutput::Connect()
 }
 
 static bool
-mpd_jack_test_default_device(void)
+mpd_jack_test_default_device()
 {
 	return true;
 }
@@ -466,7 +481,7 @@ JackOutput::Stop() noexcept
 	if (client == nullptr)
 		return;
 
-	if (shutdown)
+	if (LockWasShutdown())
 		/* the connection has failed; close it */
 		Disconnect();
 	else
@@ -502,6 +517,10 @@ JackOutput::Start()
 	const char *dports[MAX_PORTS], **jports;
 	unsigned num_dports;
 	if (num_destination_ports == 0) {
+		/* if user requests no auto connect, we are done */
+		if (!auto_destination_ports) {
+			return;
+		}
 		/* no output ports were configured - ask libjack for
 		   defaults */
 		jports = jack_get_ports(client, nullptr, nullptr,
@@ -588,16 +607,38 @@ JackOutput::Open(AudioFormat &new_audio_format)
 {
 	pause = false;
 
-	if (client != nullptr && shutdown)
+	if (client != nullptr && LockWasShutdown())
 		Disconnect();
 
 	if (client == nullptr)
 		Connect();
 
-	set_audioformat(this, new_audio_format);
+	new_audio_format.sample_rate = jack_get_sample_rate(client);
+
+	if (num_source_ports == 1)
+		new_audio_format.channels = 1;
+	else if (new_audio_format.channels > num_source_ports)
+		new_audio_format.channels = 2;
+
+	/* JACK uses 32 bit float in the range [-1 .. 1] - just like
+	   MPD's SampleFormat::FLOAT*/
+	static_assert(jack_sample_size == sizeof(float), "Expected float32");
+	new_audio_format.format = SampleFormat::FLOAT;
 	audio_format = new_audio_format;
 
+	interrupted = false;
+
 	Start();
+}
+
+void
+JackOutput::Interrupt() noexcept
+{
+	const std::unique_lock<Mutex> lock(mutex);
+
+	/* the "interrupted" flag will prevent Play() from waiting,
+	   and will instead throw AudioOutputInterrupted */
+	interrupted = true;
 }
 
 inline size_t
@@ -651,9 +692,14 @@ JackOutput::Play(const void *chunk, size_t size)
 	size /= frame_size;
 
 	while (true) {
-		if (shutdown)
-			throw std::runtime_error("Refusing to play, because "
-						 "there is no client thread");
+		{
+			const std::lock_guard<Mutex> lock(mutex);
+			if (error)
+				std::rethrow_exception(error);
+
+			if (interrupted)
+				throw AudioOutputInterrupted{};
+		}
 
 		size_t frames_written =
 			WriteSamples((const float *)chunk, size);
@@ -666,11 +712,22 @@ JackOutput::Play(const void *chunk, size_t size)
 	}
 }
 
+void
+JackOutput::Cancel() noexcept
+{
+	const std::unique_lock<Mutex> lock(mutex);
+	interrupted = false;
+}
+
 inline bool
 JackOutput::Pause()
 {
-	if (shutdown)
-		return false;
+	{
+		const std::lock_guard<Mutex> lock(mutex);
+		interrupted = false;
+		if (error)
+			std::rethrow_exception(error);
+	}
 
 	pause = true;
 

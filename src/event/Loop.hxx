@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,24 +20,30 @@
 #ifndef MPD_EVENT_LOOP_HXX
 #define MPD_EVENT_LOOP_HXX
 
-#include "thread/Id.hxx"
-#include "util/Compiler.h"
-
+#include "Chrono.hxx"
 #include "PollGroup.hxx"
-#include "thread/Mutex.hxx"
 #include "WakeFD.hxx"
 #include "SocketMonitor.hxx"
-#include "TimerEvent.hxx"
 #include "IdleMonitor.hxx"
 #include "DeferEvent.hxx"
+#include "thread/Id.hxx"
+#include "thread/Mutex.hxx"
+#include "util/Compiler.h"
 
 #include <boost/intrusive/set.hpp>
 #include <boost/intrusive/list.hpp>
 
-#include <chrono>
 #include <atomic>
+#include <cassert>
+#include <chrono>
 
-#include <assert.h>
+#include "io/uring/Features.h"
+#ifdef HAVE_URING
+#include <memory>
+namespace Uring { class Queue; class Manager; }
+#endif
+
+class TimerEvent;
 
 /**
  * An event loop that polls for events on file/socket descriptors.
@@ -54,36 +60,39 @@ class EventLoop final : SocketMonitor
 
 	struct TimerCompare {
 		constexpr bool operator()(const TimerEvent &a,
-					  const TimerEvent &b) const {
-			return a.due < b.due;
-		}
+					  const TimerEvent &b) const noexcept;
 	};
 
-	typedef boost::intrusive::multiset<TimerEvent,
-					   boost::intrusive::member_hook<TimerEvent,
-									 TimerEvent::TimerSetHook,
-									 &TimerEvent::timer_set_hook>,
+	using TimerSet =
+		boost::intrusive::multiset<TimerEvent,
+					   boost::intrusive::base_hook<boost::intrusive::set_base_hook<boost::intrusive::link_mode<boost::intrusive::auto_unlink>>>,
 					   boost::intrusive::compare<TimerCompare>,
-					   boost::intrusive::constant_time_size<false>> TimerSet;
+					   boost::intrusive::constant_time_size<false>>;
 	TimerSet timers;
 
-	typedef boost::intrusive::list<IdleMonitor,
+	using IdleList =
+		boost::intrusive::list<IdleMonitor,
 				       boost::intrusive::member_hook<IdleMonitor,
 								     IdleMonitor::ListHook,
 								     &IdleMonitor::list_hook>,
-				       boost::intrusive::constant_time_size<false>> IdleList;
+				       boost::intrusive::constant_time_size<false>>;
 	IdleList idle;
 
 	Mutex mutex;
 
-	typedef boost::intrusive::list<DeferEvent,
+	using DeferredList =
+		boost::intrusive::list<DeferEvent,
 				       boost::intrusive::member_hook<DeferEvent,
 								     DeferEvent::ListHook,
 								     &DeferEvent::list_hook>,
-				       boost::intrusive::constant_time_size<false>> DeferredList;
+				       boost::intrusive::constant_time_size<false>>;
 	DeferredList deferred;
 
-	std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+#ifdef HAVE_URING
+	std::unique_ptr<Uring::Manager> uring;
+#endif
+
+	Event::Clock::time_point now = Event::Clock::now();
 
 	/**
 	 * Is this #EventLoop alive, i.e. can events be scheduled?
@@ -109,6 +118,10 @@ class EventLoop final : SocketMonitor
 	 */
 	bool busy = true;
 
+#ifdef HAVE_URING
+	bool uring_initialized = false;
+#endif
+
 	PollGroup poll_group;
 	PollResult poll_result;
 
@@ -128,13 +141,18 @@ public:
 	~EventLoop() noexcept;
 
 	/**
-	 * A caching wrapper for std::chrono::steady_clock::now().
+	 * A caching wrapper for Event::Clock::now().
 	 */
-	std::chrono::steady_clock::time_point GetTime() const {
+	auto GetTime() const {
 		assert(IsInside());
 
 		return now;
 	}
+
+#ifdef HAVE_URING
+	gcc_pure
+	Uring::Queue *GetUring() noexcept;
+#endif
 
 	/**
 	 * Stop execution of this #EventLoop at the next chance.  This
@@ -144,13 +162,13 @@ public:
 	void Break() noexcept;
 
 	bool AddFD(int _fd, unsigned flags, SocketMonitor &m) noexcept {
-		assert(IsInside());
+		assert(!IsAlive() || IsInside());
 
 		return poll_group.Add(_fd, flags, &m);
 	}
 
 	bool ModifyFD(int _fd, unsigned flags, SocketMonitor &m) noexcept {
-		assert(IsInside());
+		assert(!IsAlive() || IsInside());
 
 		return poll_group.Modify(_fd, flags, &m);
 	}
@@ -167,9 +185,7 @@ public:
 	void AddIdle(IdleMonitor &i) noexcept;
 	void RemoveIdle(IdleMonitor &i) noexcept;
 
-	void AddTimer(TimerEvent &t,
-		      std::chrono::steady_clock::duration d) noexcept;
-	void CancelTimer(TimerEvent &t) noexcept;
+	void AddTimer(TimerEvent &t, Event::Duration d) noexcept;
 
 	/**
 	 * Schedule a call to DeferEvent::RunDeferred().
@@ -205,7 +221,7 @@ private:
 	 * duration until the next timer expires.  Returns a negative
 	 * duration if there is no timeout.
 	 */
-	std::chrono::steady_clock::duration HandleTimers() noexcept;
+	Event::Duration HandleTimers() noexcept;
 
 	bool OnSocketReady(unsigned flags) noexcept override;
 

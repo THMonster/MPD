@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -27,16 +27,14 @@
 #include <windows.h>
 #endif
 
-#include <string.h>
-
 #ifdef HAVE_ICU_CASE_FOLD
 
-IcuCompare::IcuCompare(const char *_needle) noexcept
+IcuCompare::IcuCompare(std::string_view _needle) noexcept
 	:needle(IcuCaseFold(_needle)) {}
 
 #elif defined(_WIN32)
 
-IcuCompare::IcuCompare(const char *_needle) noexcept
+IcuCompare::IcuCompare(std::string_view _needle) noexcept
 	:needle(nullptr)
 {
 	try {
@@ -47,7 +45,7 @@ IcuCompare::IcuCompare(const char *_needle) noexcept
 
 #else
 
-IcuCompare::IcuCompare(const char *_needle) noexcept
+IcuCompare::IcuCompare(std::string_view _needle) noexcept
 	:needle(AllocatedString<>::Duplicate(_needle)) {}
 
 #endif
@@ -74,7 +72,7 @@ IcuCompare::operator==(const char *haystack) const noexcept
 		return false;
 	}
 #else
-	return strcasecmp(haystack, needle.c_str());
+	return StringIsEqualIgnoreCase(haystack, needle.c_str());
 #endif
 }
 

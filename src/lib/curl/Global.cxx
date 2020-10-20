@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2016 Max Kellermann <max.kellermann@gmail.com>
+ * Copyright 2008-2019 Max Kellermann <max.kellermann@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,7 +34,8 @@
 #include "event/SocketMonitor.hxx"
 #include "util/RuntimeError.hxx"
 #include "util/Domain.hxx"
-#include "config.h"
+
+#include <cassert>
 
 static constexpr Domain curlm_domain("curlm");
 
@@ -107,12 +108,12 @@ CurlGlobal::CurlGlobal(EventLoop &_loop)
 }
 
 int
-CurlSocket::SocketFunction(gcc_unused CURL *easy,
+CurlSocket::SocketFunction([[maybe_unused]] CURL *easy,
 			   curl_socket_t s, int action,
 			   void *userp, void *socketp) noexcept
 {
 	auto &global = *(CurlGlobal *)userp;
-	CurlSocket *cs = (CurlSocket *)socketp;
+	auto *cs = (CurlSocket *)socketp;
 
 	assert(global.GetEventLoop().IsInside());
 
@@ -125,18 +126,6 @@ CurlSocket::SocketFunction(gcc_unused CURL *easy,
 		cs = new CurlSocket(global, global.GetEventLoop(),
 				    SocketDescriptor(s));
 		global.Assign(s, *cs);
-	} else {
-#ifdef USE_EPOLL
-		/* when using epoll, we need to unregister the socket
-		   each time this callback is invoked, because older
-		   CURL versions may omit the CURL_POLL_REMOVE call
-		   when the socket has been closed and recreated with
-		   the same file number (bug found in CURL 7.26, CURL
-		   7.33 not affected); in that case, epoll refuses the
-		   EPOLL_CTL_MOD because it does not know the new
-		   socket yet */
-		cs->Cancel();
-#endif
 	}
 
 	unsigned flags = CurlPollToFlags(action);
@@ -155,14 +144,11 @@ CurlSocket::OnSocketReady(unsigned flags) noexcept
 }
 
 void
-CurlGlobal::Add(CURL *easy, CurlRequest &request)
+CurlGlobal::Add(CurlRequest &r)
 {
 	assert(GetEventLoop().IsInside());
-	assert(easy != nullptr);
 
-	curl_easy_setopt(easy, CURLOPT_PRIVATE, &request);
-
-	CURLMcode mcode = curl_multi_add_handle(multi.Get(), easy);
+	CURLMcode mcode = curl_multi_add_handle(multi.Get(), r.Get());
 	if (mcode != CURLM_OK)
 		throw FormatRuntimeError("curl_multi_add_handle() failed: %s",
 					 curl_multi_strerror(mcode));
@@ -171,14 +157,17 @@ CurlGlobal::Add(CURL *easy, CurlRequest &request)
 }
 
 void
-CurlGlobal::Remove(CURL *easy) noexcept
+CurlGlobal::Remove(CurlRequest &r) noexcept
 {
 	assert(GetEventLoop().IsInside());
-	assert(easy != nullptr);
 
-	curl_multi_remove_handle(multi.Get(), easy);
+	curl_multi_remove_handle(multi.Get(), r.Get());
 }
 
+/**
+ * Find a request by its CURL "easy" handle.
+ */
+gcc_pure
 static CurlRequest *
 ToRequest(CURL *easy) noexcept
 {
@@ -241,7 +230,7 @@ CurlGlobal::UpdateTimeout(long timeout_ms) noexcept
 }
 
 int
-CurlGlobal::TimerFunction(gcc_unused CURLM *_multi, long timeout_ms,
+CurlGlobal::TimerFunction([[maybe_unused]] CURLM *_multi, long timeout_ms,
 			  void *userp) noexcept
 {
 	auto &global = *(CurlGlobal *)userp;

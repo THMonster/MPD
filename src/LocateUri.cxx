@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -22,8 +22,8 @@
 #include "client/Client.hxx"
 #include "fs/AllocatedPath.hxx"
 #include "ls.hxx"
-#include "util/UriUtil.hxx"
 #include "util/ASCII.hxx"
+#include "util/UriExtract.hxx"
 
 #ifdef ENABLE_DATABASE
 #include "storage/StorageInterface.hxx"
@@ -42,11 +42,13 @@ LocateFileUri(const char *uri, const Client *client
 
 #ifdef ENABLE_DATABASE
 	if (storage != nullptr) {
-		const char *suffix = storage->MapToRelativeUTF8(uri);
-		if (suffix != nullptr)
+		const auto suffix = storage->MapToRelativeUTF8(uri);
+		if (suffix.data() != nullptr)
 			/* this path was relative to the music
 			   directory */
-			return LocatedUri(LocatedUri::Type::RELATIVE, suffix);
+			// TODO: don't use suffix.data() (ok for now because we know it's null-terminated)
+			return LocatedUri(LocatedUri::Type::RELATIVE,
+					  suffix.data());
 	}
 #endif
 
@@ -80,9 +82,11 @@ LocateAbsoluteUri(UriPluginKind kind, const char *uri
 
 #ifdef ENABLE_DATABASE
 	if (storage != nullptr) {
-		const char *suffix = storage->MapToRelativeUTF8(uri);
-		if (suffix != nullptr)
-			return LocatedUri(LocatedUri::Type::RELATIVE, suffix);
+		const auto suffix = storage->MapToRelativeUTF8(uri);
+		if (suffix.data() != nullptr)
+			// TODO: don't use suffix.data() (ok for now because we know it's null-terminated)
+			return LocatedUri(LocatedUri::Type::RELATIVE,
+					  suffix.data());
 	}
 #endif
 

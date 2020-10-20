@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2016 Max Kellermann <max.kellermann@gmail.com>
+ * Copyright 2008-2019 Max Kellermann <max.kellermann@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -54,8 +54,8 @@ public:
 		return timeout_event.GetEventLoop();
 	}
 
-	void Add(CURL *easy, CurlRequest &request);
-	void Remove(CURL *easy) noexcept;
+	void Add(CurlRequest &r);
+	void Remove(CurlRequest &r) noexcept;
 
 	void Assign(curl_socket_t fd, CurlSocket &cs) noexcept {
 		curl_multi_assign(multi.Get(), fd, &cs);

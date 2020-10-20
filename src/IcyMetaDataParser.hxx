@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,11 +20,12 @@
 #ifndef MPD_ICY_META_DATA_PARSER_HXX
 #define MPD_ICY_META_DATA_PARSER_HXX
 
+#include "lib/icu/Converter.hxx"
 #include "tag/Tag.hxx"
+#include "config.h"
 
+#include <cstddef>
 #include <memory>
-
-#include <stddef.h>
 
 class IcyMetaDataParser {
 	size_t data_size = 0, data_rest;
@@ -32,12 +33,23 @@ class IcyMetaDataParser {
 	size_t meta_size, meta_position;
 	char *meta_data;
 
+#ifdef HAVE_ICU_CONVERTER
+	std::unique_ptr<IcuConverter> icu_converter;
+#endif
+
 	std::unique_ptr<Tag> tag;
 
 public:
 	~IcyMetaDataParser() noexcept {
 		Reset();
 	}
+
+#ifdef HAVE_ICU_CONVERTER
+	/**
+	 * Throws on error.
+	 */
+	void SetCharset(const char *charset);
+#endif
 
 	/**
 	 * Initialize an enabled icy_metadata object with the specified

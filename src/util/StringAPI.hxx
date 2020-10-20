@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 Max Kellermann <max.kellermann@gmail.com>
+ * Copyright 2010-2019 Max Kellermann <max.kellermann@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,7 +32,7 @@
 
 #include "Compiler.h"
 
-#include <string.h>
+#include <cstring>
 
 #ifdef _UNICODE
 #include "WStringAPI.hxx"
@@ -56,42 +56,63 @@ gcc_pure gcc_nonnull_all
 static inline char *
 StringFind(char *haystack, char needle, size_t size) noexcept
 {
-	return (char *)memchr(haystack, needle, size);
+	return (char *)std::memchr(haystack, needle, size);
 }
 
 gcc_pure gcc_nonnull_all
 static inline const char *
 StringFind(const char *haystack, char needle, size_t size) noexcept
 {
-	return (const char *)memchr(haystack, needle, size);
+	return (const char *)std::memchr(haystack, needle, size);
 }
 
 gcc_pure gcc_nonnull_all
 static inline const char *
 StringFind(const char *haystack, char needle) noexcept
 {
-	return strchr(haystack, needle);
+	return std::strchr(haystack, needle);
 }
 
 gcc_pure gcc_nonnull_all
 static inline char *
 StringFind(char *haystack, char needle) noexcept
 {
-	return strchr(haystack, needle);
+	return std::strchr(haystack, needle);
 }
 
 gcc_pure gcc_nonnull_all
 static inline const char *
 StringFindLast(const char *haystack, char needle) noexcept
 {
-	return strrchr(haystack, needle);
+	return std::strrchr(haystack, needle);
 }
 
 gcc_pure gcc_nonnull_all
 static inline char *
 StringFindLast(char *haystack, char needle) noexcept
 {
-	return strrchr(haystack, needle);
+	return std::strrchr(haystack, needle);
+}
+
+gcc_pure gcc_nonnull_all
+static inline const char *
+StringFindLast(const char *haystack, char needle, size_t size) noexcept
+{
+#if defined(__GLIBC__) || defined(__BIONIC__)
+	/* memrchr() is a GNU extension (and also available on
+	   Android) */
+	return (const char *)memrchr(haystack, needle, size);
+#else
+	/* emulate for everybody else */
+	const auto *p = haystack + size;
+	while (p > haystack) {
+		--p;
+		if (*p == needle)
+			return p;
+	}
+
+	return nullptr;
+#endif
 }
 
 gcc_pure gcc_nonnull_all
@@ -132,6 +153,13 @@ static inline int
 StringCompare(const char *a, const char *b) noexcept
 {
 	return strcmp(a, b);
+}
+
+gcc_pure gcc_nonnull_all
+static inline int
+StringCompare(const char *a, const char *b, size_t n) noexcept
+{
+	return strncmp(a, b, n);
 }
 
 /**

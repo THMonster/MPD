@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,22 +20,17 @@
 #include "SocketMonitor.hxx"
 #include "Loop.hxx"
 
+#include <cassert>
+#include <utility>
+
 #ifdef USE_EPOLL
 #include <cerrno>
-#endif
-
-#include <assert.h>
-
-#ifdef _WIN32
-#include <winsock2.h>
-#else
-#include <sys/socket.h>
 #endif
 
 void
 SocketMonitor::Dispatch(unsigned flags) noexcept
 {
-	flags &= GetScheduledFlags();
+	flags &= GetScheduledFlags() | IMPLICIT_FLAGS;
 
 	if (flags != 0)
 		OnSocketReady(flags);

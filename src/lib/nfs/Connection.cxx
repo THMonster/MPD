@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -37,7 +37,7 @@ extern "C" {
 #include <poll.h> /* for POLLIN, POLLOUT */
 #endif
 
-static constexpr std::chrono::steady_clock::duration NFS_MOUNT_TIMEOUT =
+static constexpr Event::Duration NFS_MOUNT_TIMEOUT =
 	std::chrono::minutes(1);
 
 inline void
@@ -160,7 +160,7 @@ NfsConnection::CancellableCallback::Callback(int err, void *data) noexcept
 			assert(close_fh == nullptr);
 
 			if (err >= 0) {
-				struct nfsfh *fh = (struct nfsfh *)data;
+				auto *fh = (struct nfsfh *)data;
 				connection.Close(fh);
 			}
 		} else if (close_fh != nullptr)
@@ -172,7 +172,7 @@ NfsConnection::CancellableCallback::Callback(int err, void *data) noexcept
 
 void
 NfsConnection::CancellableCallback::Callback(int err,
-					     gcc_unused struct nfs_context *nfs,
+					     [[maybe_unused]] struct nfs_context *nfs,
 					     void *data,
 					     void *private_data) noexcept
 {
@@ -552,8 +552,8 @@ NfsConnection::OnSocketReady(unsigned flags) noexcept
 }
 
 inline void
-NfsConnection::MountCallback(int status, gcc_unused nfs_context *nfs,
-			     gcc_unused void *data) noexcept
+NfsConnection::MountCallback(int status, [[maybe_unused]] nfs_context *nfs,
+			     [[maybe_unused]] void *data) noexcept
 {
 	assert(GetEventLoop().IsInside());
 	assert(context == nfs);
@@ -575,7 +575,7 @@ void
 NfsConnection::MountCallback(int status, nfs_context *nfs, void *data,
 			     void *private_data) noexcept
 {
-	NfsConnection *c = (NfsConnection *)private_data;
+	auto *c = (NfsConnection *)private_data;
 
 	c->MountCallback(status, nfs, data);
 }

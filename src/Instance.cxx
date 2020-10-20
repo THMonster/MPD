@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,12 +20,15 @@
 #include "config.h"
 #include "Instance.hxx"
 #include "Partition.hxx"
-#include "Idle.hxx"
+#include "IdleFlags.hxx"
+#include "StateFile.hxx"
 #include "Stats.hxx"
+#include "client/List.hxx"
+#include "input/cache/Manager.hxx"
 
 #ifdef ENABLE_CURL
 #include "RemoteTagCache.hxx"
-#include "util/UriUtil.hxx"
+#include "util/UriExtract.hxx"
 #endif
 
 #ifdef ENABLE_DATABASE
@@ -34,13 +37,15 @@
 #include "db/update/Service.hxx"
 #include "storage/StorageInterface.hxx"
 
+#ifdef ENABLE_NEIGHBOR_PLUGINS
+#include "neighbor/Glue.hxx"
+#endif
+
 #ifdef ENABLE_SQLITE
-#include "sticker/StickerDatabase.hxx"
+#include "sticker/Database.hxx"
 #include "sticker/SongSticker.hxx"
 #endif
 #endif
-
-#include <exception>
 
 Instance::Instance()
 	:rtio_thread(true),
@@ -65,6 +70,13 @@ Instance::~Instance() noexcept
 #endif
 }
 
+void
+Instance::OnStateModified() noexcept
+{
+	if (state_file)
+		state_file->CheckModified();
+}
+
 Partition *
 Instance::FindPartition(const char *name) noexcept
 {
@@ -73,6 +85,20 @@ Instance::FindPartition(const char *name) noexcept
 			return &partition;
 
 	return nullptr;
+}
+
+void
+Instance::DeletePartition(Partition &partition) noexcept
+{
+	// TODO: use boost::intrusive::list to avoid this loop
+	for (auto i = partitions.begin();; ++i) {
+		assert(i != partitions.end());
+
+		if (&*i == &partition) {
+			partitions.erase(i);
+			break;
+		}
+	}
 }
 
 #ifdef ENABLE_DATABASE
@@ -88,7 +114,7 @@ Instance::GetDatabaseOrThrow() const
 }
 
 void
-Instance::OnDatabaseModified()
+Instance::OnDatabaseModified() noexcept
 {
 	assert(database != nullptr);
 
@@ -101,15 +127,15 @@ Instance::OnDatabaseModified()
 }
 
 void
-Instance::OnDatabaseSongRemoved(const char *uri)
+Instance::OnDatabaseSongRemoved(const char *uri) noexcept
 {
 	assert(database != nullptr);
 
 #ifdef ENABLE_SQLITE
 	/* if the song has a sticker, remove it */
-	if (sticker_enabled()) {
+	if (HasStickerDatabase()) {
 		try {
-			sticker_song_delete(uri);
+			sticker_song_delete(*sticker_database, uri);
 		} catch (...) {
 		}
 	}
@@ -124,17 +150,15 @@ Instance::OnDatabaseSongRemoved(const char *uri)
 #ifdef ENABLE_NEIGHBOR_PLUGINS
 
 void
-Instance::FoundNeighbor(gcc_unused const NeighborInfo &info) noexcept
+Instance::FoundNeighbor([[maybe_unused]] const NeighborInfo &info) noexcept
 {
-	for (auto &partition : partitions)
-		partition.EmitIdle(IDLE_NEIGHBOR);
+	EmitIdle(IDLE_NEIGHBOR);
 }
 
 void
-Instance::LostNeighbor(gcc_unused const NeighborInfo &info) noexcept
+Instance::LostNeighbor([[maybe_unused]] const NeighborInfo &info) noexcept
 {
-	for (auto &partition : partitions)
-		partition.EmitIdle(IDLE_NEIGHBOR);
+	EmitIdle(IDLE_NEIGHBOR);
 }
 
 #endif
@@ -166,3 +190,18 @@ Instance::OnRemoteTag(const char *uri, const Tag &tag) noexcept
 }
 
 #endif
+
+void
+Instance::OnIdle(unsigned flags) noexcept
+{
+	/* broadcast to all partitions */
+	for (auto &partition : partitions)
+		partition.EmitIdle(flags);
+}
+
+void
+Instance::FlushCaches() noexcept
+{
+	if (input_cache)
+		input_cache->Flush();
+}

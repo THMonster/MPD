@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -22,11 +22,10 @@
 #include "Domain.hxx"
 #include "OutputAPI.hxx"
 #include "Defaults.hxx"
-#include "AudioParser.hxx"
+#include "pcm/AudioParser.hxx"
 #include "mixer/MixerList.hxx"
 #include "mixer/MixerType.hxx"
 #include "mixer/MixerControl.hxx"
-#include "mixer/plugins/SoftwareMixerPlugin.hxx"
 #include "filter/LoadChain.hxx"
 #include "filter/Prepared.hxx"
 #include "filter/plugins/AutoConvertFilterPlugin.hxx"
@@ -35,17 +34,14 @@
 #include "filter/plugins/ChainFilterPlugin.hxx"
 #include "filter/plugins/VolumeFilterPlugin.hxx"
 #include "filter/plugins/NormalizeFilterPlugin.hxx"
-#include "config/Domain.hxx"
-#include "config/Option.hxx"
-#include "config/Block.hxx"
 #include "util/RuntimeError.hxx"
 #include "util/StringAPI.hxx"
 #include "util/StringFormat.hxx"
 #include "Log.hxx"
 
+#include <cassert>
 #include <stdexcept>
 
-#include <assert.h>
 #include <string.h>
 
 #define AUDIO_OUTPUT_TYPE	"type"
@@ -66,15 +62,15 @@ FilteredAudioOutput::FilteredAudioOutput(const char *_plugin_name,
 static const AudioOutputPlugin *
 audio_output_detect()
 {
-	LogDefault(output_domain, "Attempt to detect audio output device");
+	LogInfo(output_domain, "Attempt to detect audio output device");
 
 	audio_output_plugins_for_each(plugin) {
 		if (plugin->test_default_device == nullptr)
 			continue;
 
-		FormatDefault(output_domain,
-			      "Attempting to detect a %s audio device",
-			      plugin->name);
+		FormatInfo(output_domain,
+			   "Attempting to detect a %s audio device",
+			   plugin->name);
 		if (ao_plugin_test_default_device(plugin))
 			return plugin;
 	}
@@ -110,14 +106,14 @@ audio_output_mixer_type(const ConfigBlock &block,
 static Mixer *
 audio_output_load_mixer(EventLoop &event_loop, FilteredAudioOutput &ao,
 			const ConfigBlock &block,
-			const AudioOutputDefaults &defaults,
+			const MixerType mixer_type,
 			const MixerPlugin *plugin,
 			PreparedFilter &filter_chain,
 			MixerListener &listener)
 {
 	Mixer *mixer;
 
-	switch (audio_output_mixer_type(block, defaults)) {
+	switch (mixer_type) {
 	case MixerType::NONE:
 		return nullptr;
 
@@ -210,18 +206,26 @@ FilteredAudioOutput::Setup(EventLoop &event_loop,
 	    !config_audio_format.IsFullyDefined())
 		throw std::runtime_error("Need full audio format specification");
 
+	const auto mixer_type = audio_output_mixer_type(block, defaults);
+
 	/* create the replay_gain filter */
 
 	const char *replay_gain_handler =
 		block.GetBlockValue("replay_gain_handler", "software");
 
 	if (!StringIsEqual(replay_gain_handler, "none")) {
+		/* when using software volume, we lose quality by
+		   invoking PcmVolume::Apply() twice; to avoid losing
+		   too much precision, we allow the ReplayGainFilter
+		   to convert 16 bit to 24 bit */
+		const bool allow_convert = mixer_type == MixerType::SOFTWARE;
+
 		prepared_replay_gain_filter =
-			NewReplayGainFilter(replay_gain_config);
+			NewReplayGainFilter(replay_gain_config, allow_convert);
 		assert(prepared_replay_gain_filter != nullptr);
 
 		prepared_other_replay_gain_filter =
-			NewReplayGainFilter(replay_gain_config);
+			NewReplayGainFilter(replay_gain_config, allow_convert);
 		assert(prepared_other_replay_gain_filter != nullptr);
 	}
 
@@ -229,7 +233,7 @@ FilteredAudioOutput::Setup(EventLoop &event_loop,
 
 	try {
 		mixer = audio_output_load_mixer(event_loop, *this, block,
-						defaults,
+						mixer_type,
 						mixer_plugin,
 						*prepared_filter,
 						mixer_listener);
@@ -285,9 +289,9 @@ audio_output_new(EventLoop &event_loop,
 
 		plugin = audio_output_detect();
 
-		FormatDefault(output_domain,
-			      "Successfully detected a %s audio device",
-			      plugin->name);
+		FormatNotice(output_domain,
+			     "Successfully detected a %s audio device",
+			     plugin->name);
 	}
 
 	std::unique_ptr<AudioOutput> ao(ao_plugin_init(event_loop, *plugin,

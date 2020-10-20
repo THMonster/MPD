@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,7 +21,7 @@
 #define MPD_DECODER_CONTROL_HXX
 
 #include "Command.hxx"
-#include "AudioFormat.hxx"
+#include "pcm/AudioFormat.hxx"
 #include "MixRampInfo.hxx"
 #include "input/Handler.hxx"
 #include "thread/Mutex.hxx"
@@ -31,12 +31,11 @@
 #include "ReplayGainConfig.hxx"
 #include "ReplayGainMode.hxx"
 
+#include <cassert>
+#include <cstdint>
 #include <exception>
-#include <utility>
 #include <memory>
-
-#include <assert.h>
-#include <stdint.h>
+#include <utility>
 
 /* damn you, windows.h! */
 #ifdef ERROR
@@ -46,6 +45,7 @@
 class DetachedSong;
 class MusicBuffer;
 class MusicPipe;
+class InputCacheManager;
 
 enum class DecoderState : uint8_t {
 	STOP = 0,
@@ -68,6 +68,8 @@ class DecoderControl final : public InputStreamHandler {
 	Thread thread;
 
 public:
+	InputCacheManager *const input_cache;
+
 	/**
 	 * This lock protects #state and #command.
 	 *
@@ -108,13 +110,6 @@ private:
 	bool quit;
 
 public:
-	/**
-	 * Is the client currently waiting for the DecoderThread?  If
-	 * false, the DecoderThread may omit invoking Cond::signal(),
-	 * reducing the number of system calls.
-	 */
-	bool client_is_waiting = false;
-
 	bool seek_error;
 	bool seekable;
 
@@ -187,6 +182,7 @@ public:
 	 * @param _client_cond see #client_cond
 	 */
 	DecoderControl(Mutex &_mutex, Cond &_client_cond,
+		       InputCacheManager *_input_cache,
 		       const AudioFormat _configured_audio_format,
 		       const ReplayGainConfig &_replay_gain_config) noexcept;
 	~DecoderControl() noexcept;
@@ -200,26 +196,12 @@ public:
 	}
 
 	/**
-	 * Locks the object.
-	 */
-	void Lock() const noexcept {
-		mutex.lock();
-	}
-
-	/**
-	 * Unlocks the object.
-	 */
-	void Unlock() const noexcept {
-		mutex.unlock();
-	}
-
-	/**
 	 * Signals the object.  This function is only valid in the
 	 * player thread.  The object should be locked prior to
 	 * calling this function.
 	 */
 	void Signal() noexcept {
-		cond.signal();
+		cond.notify_one();
 	}
 
 	/**
@@ -227,8 +209,8 @@ public:
 	 * is only valid in the decoder thread.  The object must be locked
 	 * prior to calling this function.
 	 */
-	void Wait() noexcept {
-		cond.wait(mutex);
+	void Wait(std::unique_lock<Mutex> &lock) noexcept {
+		cond.wait(lock);
 	}
 
 	/**
@@ -238,7 +220,9 @@ public:
 	 *
 	 * Caller must hold the lock.
 	 */
-	void WaitForDecoder() noexcept;
+	void WaitForDecoder(std::unique_lock<Mutex> &lock) noexcept {
+		client_cond.wait(lock);
+	}
 
 	bool IsIdle() const noexcept {
 		return state == DecoderState::STOP ||
@@ -343,9 +327,9 @@ private:
 	 * To be called from the client thread.  Caller must lock the
 	 * object.
 	 */
-	void WaitCommandLocked() noexcept {
+	void WaitCommandLocked(std::unique_lock<Mutex> &lock) noexcept {
 		while (command != DecoderCommand::NONE)
-			WaitForDecoder();
+			WaitForDecoder(lock);
 	}
 
 	/**
@@ -355,10 +339,11 @@ private:
 	 * To be called from the client thread.  Caller must lock the
 	 * object.
 	 */
-	void SynchronousCommandLocked(DecoderCommand cmd) noexcept {
+	void SynchronousCommandLocked(std::unique_lock<Mutex> &lock,
+				      DecoderCommand cmd) noexcept {
 		command = cmd;
 		Signal();
-		WaitCommandLocked();
+		WaitCommandLocked(lock);
 	}
 
 	/**
@@ -369,9 +354,9 @@ private:
 	 * object.
 	 */
 	void LockSynchronousCommand(DecoderCommand cmd) noexcept {
-		const std::lock_guard<Mutex> protect(mutex);
+		std::unique_lock<Mutex> lock(mutex);
 		ClearError();
-		SynchronousCommandLocked(cmd);
+		SynchronousCommandLocked(lock, cmd);
 	}
 
 	void LockAsynchronousCommand(DecoderCommand cmd) noexcept {
@@ -392,7 +377,7 @@ public:
 		assert(command != DecoderCommand::NONE);
 
 		command = DecoderCommand::NONE;
-		client_cond.signal();
+		client_cond.notify_one();
 	}
 
 	/**
@@ -409,7 +394,8 @@ public:
 	 * @param pipe the pipe which receives the decoded chunks (owned by
 	 * the caller)
 	 */
-	void Start(std::unique_ptr<DetachedSong> song,
+	void Start(std::unique_lock<Mutex> &lock,
+		   std::unique_ptr<DetachedSong> song,
 		   SongTime start_time, SongTime end_time,
 		   bool initial_seek_essential,
 		   MusicBuffer &buffer,
@@ -418,14 +404,14 @@ public:
 	/**
 	 * Caller must lock the object.
 	 */
-	void Stop() noexcept;
+	void Stop(std::unique_lock<Mutex> &lock) noexcept;
 
 	/**
 	 * Throws #std::runtime_error on error.
 	 *
 	 * Caller must lock the object.
 	 */
-	void Seek(SongTime t);
+	void Seek(std::unique_lock<Mutex> &lock, SongTime t);
 
 	void Quit() noexcept;
 
@@ -456,11 +442,11 @@ private:
 
 	/* virtual methods from class InputStreamHandler */
 	void OnInputStreamReady() noexcept override {
-		cond.signal();
+		cond.notify_one();
 	}
 
 	void OnInputStreamAvailable() noexcept override {
-		cond.signal();
+		cond.notify_one();
 	}
 };
 

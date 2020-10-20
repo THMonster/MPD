@@ -23,7 +23,6 @@
 
 #include "lib/icu/Win32.hxx"
 #include "system/Error.hxx"
-#include "util/Macros.hxx"
 
 #include <windows.h>
 
@@ -40,11 +39,11 @@ AcpToAllocatedPath(const char *s)
 {
 	wchar_t buffer[MAX_PATH];
 	auto result = MultiByteToWideChar(CP_ACP, 0, s, -1,
-					  buffer, ARRAY_SIZE(buffer));
+					  buffer, std::size(buffer));
 	if (result <= 0)
 		throw MakeLastError("MultiByteToWideChar() failed");
 
-	return AllocatedPath::FromFS(buffer);
+	return AllocatedPath::FromFS(std::wstring_view(buffer, result));
 }
 
 FromNarrowPath::FromNarrowPath(const char *s)

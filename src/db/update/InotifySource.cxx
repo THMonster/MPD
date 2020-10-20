@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,7 +19,7 @@
 
 #include "InotifySource.hxx"
 #include "InotifyDomain.hxx"
-#include "system/FileDescriptor.hxx"
+#include "io/FileDescriptor.hxx"
 #include "system/FatalError.hxx"
 #include "system/Error.hxx"
 #include "Log.hxx"
@@ -31,7 +31,7 @@
 #include <sys/inotify.h>
 
 bool
-InotifySource::OnSocketReady(gcc_unused unsigned flags) noexcept
+InotifySource::OnSocketReady([[maybe_unused]] unsigned flags) noexcept
 {
 	uint8_t buffer[4096];
 	static_assert(sizeof(buffer) >= sizeof(struct inotify_event) + NAME_MAX + 1,

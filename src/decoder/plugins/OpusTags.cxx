@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,20 +19,20 @@
 
 #include "OpusTags.hxx"
 #include "OpusReader.hxx"
+#include "lib/xiph/VorbisPicture.hxx"
 #include "lib/xiph/XiphTags.hxx"
 #include "tag/Handler.hxx"
 #include "tag/ParseName.hxx"
 #include "util/ASCII.hxx"
 #include "ReplayGainInfo.hxx"
+#include "util/NumberParser.hxx"
+#include "util/StringView.hxx"
 
-#include <string>
-
-#include <stdint.h>
-#include <stdlib.h>
+#include <cstdint>
 
 gcc_pure
 static TagType
-ParseOpusTagName(const char *name) noexcept
+ParseOpusTagName(StringView name) noexcept
 {
 	TagType type = tag_name_parse_i(name);
 	if (type != TAG_NUM_OF_ITEM_TYPES)
@@ -42,27 +42,35 @@ ParseOpusTagName(const char *name) noexcept
 }
 
 static void
-ScanOneOpusTag(const char *name, const char *value,
+ScanOneOpusTag(StringView name, StringView value,
 	       ReplayGainInfo *rgi,
 	       TagHandler &handler) noexcept
 {
-	if (rgi != nullptr && StringEqualsCaseASCII(name, "R128_TRACK_GAIN")) {
+	if (handler.WantPicture() &&
+	    name.EqualsIgnoreCase("METADATA_BLOCK_PICTURE"))
+		return ScanVorbisPicture(value, handler);
+
+	if (value.size >= 4096)
+		/* ignore large values */
+		return;
+
+	if (rgi != nullptr && name.EqualsIgnoreCase("R128_TRACK_GAIN")) {
 		/* R128_TRACK_GAIN is a Q7.8 fixed point number in
 		   dB */
 
-		char *endptr;
-		long l = strtol(value, &endptr, 10);
-		if (endptr > value && *endptr == 0)
-			rgi->track.gain += float(l) / 256.0f;
+		const char *endptr;
+		const auto l = ParseInt64(value, &endptr, 10);
+		if (endptr > value.begin() && endptr == value.end())
+			rgi->track.gain = float(l) / 256.0f;
 	} else if (rgi != nullptr &&
-		   StringEqualsCaseASCII(name, "R128_ALBUM_GAIN")) {
+		   name.EqualsIgnoreCase("R128_ALBUM_GAIN")) {
 		/* R128_ALBUM_GAIN is a Q7.8 fixed point number in
 		   dB */
 
-		char *endptr;
-		long l = strtol(value, &endptr, 10);
-		if (endptr > value && *endptr == 0)
-			rgi->album.gain += float(l) / 256.0f;
+		const char *endptr;
+		const auto l = ParseInt64(value, &endptr, 10);
+		if (endptr > value.begin() && endptr == value.end())
+			rgi->album.gain = float(l) / 256.0f;
 	}
 
 	handler.OnPair(name, value);
@@ -98,21 +106,11 @@ ScanOpusTags(const void *data, size_t size,
 		if (s == nullptr)
 			return false;
 
-		if (s.size >= 4096)
+		const auto split = s.Split('=');
+		if (split.first.empty() || split.second.IsNull())
 			continue;
 
-		const auto eq = s.Find('=');
-		if (eq == nullptr || eq == s.data)
-			continue;
-
-		auto name = s, value = s;
-		name.SetEnd(eq);
-		value.MoveFront(eq + 1);
-
-		const std::string name2(name.data, name.size);
-		const std::string value2(value.data, value.size);
-
-		ScanOneOpusTag(name2.c_str(), value2.c_str(), rgi, handler);
+		ScanOneOpusTag(split.first, split.second, rgi, handler);
 	}
 
 	return true;

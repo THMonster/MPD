@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -26,7 +26,6 @@
 #include "tag/Table.hxx"
 #include "util/StringView.hxx"
 #include "lib/expat/ExpatParser.hxx"
-#include "Log.hxx"
 
 #include <string.h>
 
@@ -80,9 +79,9 @@ static constexpr struct tag_table xspf_tag_elements[] = {
 
 static void XMLCALL
 xspf_start_element(void *user_data, const XML_Char *element_name,
-		   gcc_unused const XML_Char **atts)
+		   [[maybe_unused]] const XML_Char **atts)
 {
-	XspfParser *parser = (XspfParser *)user_data;
+	auto *parser = (XspfParser *)user_data;
 	parser->value.clear();
 
 	switch (parser->state) {
@@ -127,7 +126,7 @@ xspf_start_element(void *user_data, const XML_Char *element_name,
 static void XMLCALL
 xspf_end_element(void *user_data, const XML_Char *element_name)
 {
-	XspfParser *parser = (XspfParser *)user_data;
+	auto *parser = (XspfParser *)user_data;
 
 	switch (parser->state) {
 	case XspfParser::ROOT:
@@ -177,7 +176,7 @@ xspf_end_element(void *user_data, const XML_Char *element_name)
 static void XMLCALL
 xspf_char_data(void *user_data, const XML_Char *s, int len)
 {
-	XspfParser *parser = (XspfParser *)user_data;
+	auto *parser = (XspfParser *)user_data;
 
 	switch (parser->state) {
 	case XspfParser::ROOT:
@@ -224,15 +223,7 @@ static const char *const xspf_mime_types[] = {
 	nullptr
 };
 
-const struct playlist_plugin xspf_playlist_plugin = {
-	"xspf",
-
-	nullptr,
-	nullptr,
-	nullptr,
-	xspf_open_stream,
-
-	nullptr,
-	xspf_suffixes,
-	xspf_mime_types,
-};
+const PlaylistPlugin xspf_playlist_plugin =
+	PlaylistPlugin("xspf", xspf_open_stream)
+	.WithSuffixes(xspf_suffixes)
+	.WithMimeTypes(xspf_mime_types);

@@ -37,15 +37,13 @@
 #include "util/StringStrip.hxx"
 #include "util/StringView.hxx"
 #include "util/CharUtil.hxx"
-#include "util/Domain.hxx"
-#include "Log.hxx"
-
+#include "Version.h"
 
 #include <curl/curl.h>
 
 #include <algorithm>
+#include <cassert>
 
-#include <assert.h>
 #include <string.h>
 
 CurlRequest::CurlRequest(CurlGlobal &_global,
@@ -80,7 +78,7 @@ CurlRequest::Start()
 {
 	assert(!registered);
 
-	global.Add(easy.Get(), *this);
+	global.Add(*this);
 	registered = true;
 }
 
@@ -98,7 +96,7 @@ CurlRequest::Stop() noexcept
 	if (!registered)
 		return;
 
-	global.Remove(easy.Get());
+	global.Remove(*this);
 	registered = false;
 }
 
@@ -139,7 +137,7 @@ CurlRequest::FinishHeaders()
 	state = State::BODY;
 
 	long status = 0;
-	curl_easy_getinfo(easy.Get(), CURLINFO_RESPONSE_CODE, &status);
+	easy.GetInfo(CURLINFO_RESPONSE_CODE, &status);
 
 	handler.OnHeaders(status, std::move(headers));
 }

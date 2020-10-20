@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -29,7 +29,7 @@
 #include "util/Domain.hxx"
 #include "util/Manual.hxx"
 #include "util/ConstBuffer.hxx"
-#include "pcm/PcmExport.hxx"
+#include "pcm/Export.hxx"
 #include "thread/Mutex.hxx"
 #include "thread/Cond.hxx"
 #include "util/ByteOrder.hxx"
@@ -203,7 +203,7 @@ OSXOutput::GetVolume()
 	const auto vol = AudioObjectGetPropertyDataT<Float32>(dev_id,
 							      aopa);
 
-	return static_cast<int>(vol * 100.0);
+	return static_cast<int>(vol * 100.0f);
 }
 
 void
@@ -420,10 +420,11 @@ osx_output_set_device_format(AudioDeviceID dev_id,
 			float score = osx_output_score_format(format_desc, target_format);
 
 			// print all (linear pcm) formats and their rating
-			if (score > 0.0)
+			if (score > 0.0f)
 				FormatDebug(osx_output_domain,
 					    "Format: %s rated %f",
-					    StreamDescriptionToString(format_desc).c_str(), score);
+					    StreamDescriptionToString(format_desc).c_str(),
+					    (double)score);
 
 			if (score > output_score) {
 				output_score  = score;
@@ -688,7 +689,6 @@ OSXOutput::Open(AudioFormat &audio_format)
 	PcmExport::Params params;
 	params.alsa_channel_order = true;
 	bool dop = dop_setting;
-	params.dop = false;
 #endif
 
 	memset(&asbd, 0, sizeof(asbd));
@@ -713,7 +713,7 @@ OSXOutput::Open(AudioFormat &audio_format)
 #ifdef ENABLE_DSD
 	if (dop && audio_format.format == SampleFormat::DSD) {
 		asbd.mBitsPerChannel = 24;
-		params.dop = true;
+		params.dsd_mode = PcmExport::DsdMode::DOP;
 		asbd.mSampleRate = params.CalcOutputSampleRate(audio_format.sample_rate);
 		asbd.mBytesPerPacket = 4 * audio_format.channels;
 
@@ -730,14 +730,14 @@ OSXOutput::Open(AudioFormat &audio_format)
 	if (audio_format.format == SampleFormat::DSD &&
 	    sample_rate != asbd.mSampleRate) {
 		// fall back to PCM in case sample_rate cannot be synchronized
-		params.dop = false;
+		params.dsd_mode = PcmExport::DsdMode::NONE;
 		audio_format.format = SampleFormat::S32;
 		asbd.mBitsPerChannel = 32;
 		asbd.mBytesPerPacket = audio_format.GetFrameSize();
 		asbd.mSampleRate = params.CalcOutputSampleRate(audio_format.sample_rate);
 		asbd.mBytesPerFrame = asbd.mBytesPerPacket;
 	}
-	dop_enabled = params.dop;
+	dop_enabled = params.dsd_mode == PcmExport::DsdMode::DOP;
 #endif
 
 	AudioUnitSetInputStreamFormat(au, asbd);
@@ -761,7 +761,7 @@ OSXOutput::Open(AudioFormat &audio_format)
 	if (dop_enabled) {
 		pcm_export->Open(audio_format.format, audio_format.channels, params);
 		ring_buffer_size = std::max<size_t>(buffer_frame_size,
-						   MPD_OSX_BUFFER_TIME_MS * pcm_export->GetFrameSize(audio_format) * asbd.mSampleRate / 1000);
+						   MPD_OSX_BUFFER_TIME_MS * pcm_export->GetOutputFrameSize() * asbd.mSampleRate / 1000);
 	}
 #endif
 	ring_buffer = new boost::lockfree::spsc_queue<uint8_t>(ring_buffer_size);
@@ -782,12 +782,6 @@ OSXOutput::Play(const void *chunk, size_t size)
 #ifdef ENABLE_DSD
 	if (dop_enabled) {
 		input = ConstBuffer<uint8_t>::FromVoid(pcm_export->Export(input.ToVoid()));
-		/* the DoP (DSD over PCM) filter converts two frames
-		   at a time and ignores the last odd frame; if there
-		   was only one frame (e.g. the last frame in the
-		   file), the result is empty; to avoid an endless
-		   loop, bail out here, and pretend the one frame has
-		   been played */
 		if (input.empty())
 			return size;
 	}
@@ -805,7 +799,7 @@ OSXOutput::Play(const void *chunk, size_t size)
 
 #ifdef ENABLE_DSD
 	if (dop_enabled)
-		bytes_written = pcm_export->CalcSourceSize(bytes_written);
+		bytes_written = pcm_export->CalcInputSize(bytes_written);
 #endif
 
 	return bytes_written;

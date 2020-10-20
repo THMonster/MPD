@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2017 Content Management AG
+ * Copyright 2007-2019 Content Management AG
  * All rights reserved.
  *
  * author: Max Kellermann <mk@cm4all.com>
@@ -33,6 +33,8 @@
 #include "Message.hxx"
 #include "ReadIter.hxx"
 
+#include <stdexcept>
+
 ODBus::Message
 ODBus::Message::NewMethodCall(const char *destination,
 			      const char *path,
@@ -58,7 +60,7 @@ ODBus::Message::StealReply(DBusPendingCall &pending)
 }
 
 ODBus::Message
-ODBus::Message::Pop(DBusConnection &connection)
+ODBus::Message::Pop(DBusConnection &connection) noexcept
 {
 	auto *msg = dbus_connection_pop_message(&connection);
 	return Message(msg);

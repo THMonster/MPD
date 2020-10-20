@@ -27,7 +27,6 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "SocketDescriptor.hxx"
 #include "SocketAddress.hxx"
 #include "StaticSocketAddress.hxx"
@@ -43,7 +42,9 @@
 #include <netinet/tcp.h>
 #endif
 
-#include <errno.h>
+#include <cassert>
+#include <cerrno>
+
 #include <string.h>
 
 int

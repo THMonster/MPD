@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -53,6 +53,8 @@ class ClientList;
 struct Partition;
 class StateFile;
 class RemoteTagCache;
+class StickerDatabase;
+class InputCacheManager;
 
 /**
  * A utility class which, when used as the first base class, ensures
@@ -97,10 +99,16 @@ struct Instance final
 	Systemd::Watchdog systemd_watchdog;
 #endif
 
+	std::unique_ptr<InputCacheManager> input_cache;
+
+	/**
+	 * Monitor for global idle events to be broadcasted to all
+	 * partitions.
+	 */
 	MaskMonitor idle_monitor;
 
 #ifdef ENABLE_NEIGHBOR_PLUGINS
-	NeighborGlue *neighbors;
+	std::unique_ptr<NeighborGlue> neighbors;
 #endif
 
 #ifdef ENABLE_DATABASE
@@ -119,11 +127,15 @@ struct Instance final
 	std::unique_ptr<RemoteTagCache> remote_tag_cache;
 #endif
 
-	ClientList *client_list;
+	std::unique_ptr<ClientList> client_list;
 
 	std::list<Partition> partitions;
 
-	StateFile *state_file = nullptr;
+	std::unique_ptr<StateFile> state_file;
+
+#ifdef ENABLE_SQLITE
+	std::unique_ptr<StickerDatabase> sticker_database;
+#endif
 
 	Instance();
 	~Instance() noexcept;
@@ -131,13 +143,26 @@ struct Instance final
 	/**
 	 * Wrapper for EventLoop::Break().  Call to initiate shutdown.
 	 */
-	void Break() {
+	void Break() noexcept {
 		event_loop.Break();
 	}
 
-	void EmitIdle(unsigned mask) {
+	/**
+	 * Emit an "idle" event to all clients of all partitions.
+	 *
+	 * This method can be called from any thread.
+	 */
+	void EmitIdle(unsigned mask) noexcept {
 		idle_monitor.OrMask(mask);
 	}
+
+	/**
+	 * Notify the #Instance that the state has been modified, and
+	 * the #StateFile may need to be saved.
+	 *
+	 * This method must be called from the main thread.
+	 */
+	void OnStateModified() noexcept;
 
 	/**
 	 * Find a #Partition with the given name.  Returns nullptr if
@@ -145,6 +170,8 @@ struct Instance final
 	 */
 	gcc_pure
 	Partition *FindPartition(const char *name) noexcept;
+
+	void DeletePartition(Partition &partition) noexcept;
 
 	void BeginShutdownPartitions() noexcept;
 
@@ -154,7 +181,7 @@ struct Instance final
 	 * if this MPD configuration has no database (no
 	 * music_directory was configured).
 	 */
-	Database *GetDatabase() {
+	Database *GetDatabase() noexcept {
 		return database.get();
 	}
 
@@ -164,6 +191,12 @@ struct Instance final
 	 * music_directory was configured).
 	 */
 	const Database &GetDatabaseOrThrow() const;
+#endif
+
+#ifdef ENABLE_SQLITE
+	bool HasStickerDatabase() noexcept {
+		return sticker_database != nullptr;
+	}
 #endif
 
 	void BeginShutdownUpdate() noexcept;
@@ -176,10 +209,13 @@ struct Instance final
 	}
 #endif
 
+	void FlushCaches() noexcept;
+
 private:
 #ifdef ENABLE_DATABASE
-	void OnDatabaseModified() override;
-	void OnDatabaseSongRemoved(const char *uri) override;
+	/* virtual methods from class DatabaseListener */
+	void OnDatabaseModified() noexcept override;
+	void OnDatabaseSongRemoved(const char *uri) noexcept override;
 #endif
 
 #ifdef ENABLE_NEIGHBOR_PLUGINS
@@ -194,7 +230,7 @@ private:
 #endif
 
 	/* callback for #idle_monitor */
-	void OnIdle(unsigned mask);
+	void OnIdle(unsigned mask) noexcept;
 };
 
 #endif

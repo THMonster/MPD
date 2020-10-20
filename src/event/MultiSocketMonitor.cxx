@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,7 +23,7 @@
 #include <algorithm>
 
 #ifdef USE_EPOLL
-#include <errno.h>
+#include <cerrno>
 #endif
 
 #ifndef _WIN32
@@ -117,7 +117,7 @@ MultiSocketMonitor::Prepare() noexcept
 		/* if there was at least one file descriptor not
 		   supported by epoll, install a very short timeout
 		   because we assume it's always ready */
-		constexpr std::chrono::steady_clock::duration ready_timeout =
+		constexpr Event::Duration ready_timeout =
 			std::chrono::milliseconds(1);
 		if (timeout < timeout.zero() || timeout > ready_timeout)
 			timeout = ready_timeout;

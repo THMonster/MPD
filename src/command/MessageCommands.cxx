@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,15 +20,14 @@
 #include "MessageCommands.hxx"
 #include "Request.hxx"
 #include "client/Client.hxx"
-#include "client/ClientList.hxx"
+#include "client/List.hxx"
 #include "client/Response.hxx"
-#include "Instance.hxx"
 #include "util/ConstBuffer.hxx"
+#include "Partition.hxx"
 
+#include <cassert>
 #include <set>
 #include <string>
-
-#include <assert.h>
 
 CommandResult
 handle_subscribe(Client &client, Request args, Response &r)
@@ -73,14 +72,17 @@ handle_unsubscribe(Client &client, Request args, Response &r)
 }
 
 CommandResult
-handle_channels(Client &client, gcc_unused Request args, Response &r)
+handle_channels(Client &client, [[maybe_unused]] Request args, Response &r)
 {
 	assert(args.empty());
 
 	std::set<std::string> channels;
-	for (const auto &c : *client.GetInstance().client_list)
-		channels.insert(c.subscriptions.begin(),
-				c.subscriptions.end());
+
+	for (const auto &c : client.GetPartition().clients) {
+		const auto &subscriptions = c.GetSubscriptions();
+		channels.insert(subscriptions.begin(),
+				subscriptions.end());
+	}
 
 	for (const auto &channel : channels)
 		r.Format("channel: %s\n", channel.c_str());
@@ -90,17 +92,14 @@ handle_channels(Client &client, gcc_unused Request args, Response &r)
 
 CommandResult
 handle_read_messages(Client &client,
-		     gcc_unused Request args, Response &r)
+		     [[maybe_unused]] Request args, Response &r)
 {
 	assert(args.empty());
 
-	while (!client.messages.empty()) {
-		const ClientMessage &msg = client.messages.front();
-
+	client.ConsumeMessages([&r](const auto &msg){
 		r.Format("channel: %s\nmessage: %s\n",
 			 msg.GetChannel(), msg.GetMessage());
-		client.messages.pop_front();
-	}
+	});
 
 	return CommandResult::OK;
 }
@@ -120,7 +119,8 @@ handle_send_message(Client &client, Request args, Response &r)
 
 	bool sent = false;
 	const ClientMessage msg(channel_name, message_text);
-	for (auto &c : *client.GetInstance().client_list)
+
+	for (auto &c : client.GetPartition().clients)
 		if (c.PushMessage(msg))
 			sent = true;
 

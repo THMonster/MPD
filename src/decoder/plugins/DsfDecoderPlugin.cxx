@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -31,12 +31,11 @@
 #include "DsfDecoderPlugin.hxx"
 #include "../DecoderAPI.hxx"
 #include "input/InputStream.hxx"
-#include "CheckAudioFormat.hxx"
-#include "util/bit_reverse.h"
+#include "pcm/CheckAudioFormat.hxx"
+#include "util/BitReverse.hxx"
 #include "util/ByteOrder.hxx"
 #include "DsdLib.hxx"
 #include "tag/Handler.hxx"
-#include "Log.hxx"
 
 #include <string.h>
 
@@ -362,15 +361,7 @@ static const char *const dsf_mime_types[] = {
 	nullptr
 };
 
-const struct DecoderPlugin dsf_decoder_plugin = {
-	"dsf",
-	nullptr,
-	nullptr,
-	dsf_stream_decode,
-	nullptr,
-	nullptr,
-	dsf_scan_stream,
-	nullptr,
-	dsf_suffixes,
-	dsf_mime_types,
-};
+constexpr DecoderPlugin dsf_decoder_plugin =
+	DecoderPlugin("dsf", dsf_stream_decode, dsf_scan_stream)
+	.WithSuffixes(dsf_suffixes)
+	.WithMimeTypes(dsf_mime_types);

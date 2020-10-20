@@ -35,12 +35,11 @@
 #ifdef _WIN32
 
 #include "CriticalSection.hxx"
-class Mutex : public CriticalSection {};
+using Mutex = CriticalSection;
 
 #else
 
-#include "PosixMutex.hxx"
-class Mutex : public PosixMutex {};
+using Mutex = std::mutex;
 
 #endif
 
@@ -54,7 +53,7 @@ class ScopeUnlock {
 public:
 	explicit ScopeUnlock(Mutex &_mutex) noexcept:mutex(_mutex) {
 		mutex.unlock();
-	};
+	}
 
 	~ScopeUnlock() noexcept {
 		mutex.lock();

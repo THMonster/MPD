@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,7 +19,7 @@
 
 #include "Registry.hxx"
 #include "InputPlugin.hxx"
-#include "util/Macros.hxx"
+#include "input/Features.h"
 #include "plugins/TidalInputPlugin.hxx"
 #include "plugins/QobuzInputPlugin.hxx"
 #include "config.h"
@@ -83,7 +83,11 @@ const InputPlugin *const input_plugins[] = {
 	nullptr
 };
 
-bool input_plugins_enabled[ARRAY_SIZE(input_plugins) - 1];
+static constexpr std::size_t n_input_plugins = std::size(input_plugins) - 1;
+
+/* the std::max() is just here to avoid a zero-sized array, which is
+   forbidden in C++ */
+bool input_plugins_enabled[std::max(n_input_plugins, std::size_t(1))];
 
 bool
 HasRemoteTagScanner(const char *uri) noexcept

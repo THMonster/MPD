@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,15 +19,16 @@
 
 #include "SolarisOutputPlugin.hxx"
 #include "../OutputAPI.hxx"
-#include "system/FileDescriptor.hxx"
+#include "io/FileDescriptor.hxx"
 #include "system/Error.hxx"
+
+#include <cerrno>
 
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <errno.h>
 
 #if defined(__sun)
 #include <sys/audio.h>
@@ -43,6 +44,7 @@
 #define I_FLUSH 0
 #endif
 
+#define AUDIO_INITINFO(v)
 #define AUDIO_GETINFO 0
 #define AUDIO_SETINFO 0
 #define AUDIO_ENCODING_LINEAR 0
@@ -93,9 +95,7 @@ SolarisOutput::Open(AudioFormat &audio_format)
 	struct audio_info info;
 	int ret;
 
-	/* support only 16 bit mono/stereo for now; nothing else has
-	   been tested */
-	audio_format.format = SampleFormat::S16;
+	AUDIO_INITINFO(&info);
 
 	/* open the device in non-blocking mode */
 
@@ -109,17 +109,21 @@ SolarisOutput::Open(AudioFormat &audio_format)
 
 	/* configure the audio device */
 
-	ret = ioctl(fd.Get(), AUDIO_GETINFO, &info);
-	if (ret < 0) {
-		const int e = errno;
-		fd.Close();
-		throw MakeErrno(e, "AUDIO_GETINFO failed");
-	}
-
 	info.play.sample_rate = audio_format.sample_rate;
 	info.play.channels = audio_format.channels;
-	info.play.precision = 16;
 	info.play.encoding = AUDIO_ENCODING_LINEAR;
+	switch (audio_format.format) {
+	case SampleFormat::S8:
+		info.play.precision = 8;
+		break;
+	case SampleFormat::S16:
+		info.play.precision = 16;
+		break;
+	default:
+		info.play.precision = 32;
+		audio_format.format = SampleFormat::S32;
+		break;
+	}
 
 	ret = ioctl(fd.Get(), AUDIO_SETINFO, &info);
 	if (ret < 0) {

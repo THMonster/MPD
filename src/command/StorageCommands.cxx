@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -22,14 +22,12 @@
 #include "config.h"
 #include "StorageCommands.hxx"
 #include "Request.hxx"
-#include "CommandError.hxx"
 #include "time/ChronoUtil.hxx"
 #include "util/UriUtil.hxx"
 #include "util/ConstBuffer.hxx"
 #include "fs/Traits.hxx"
 #include "client/Client.hxx"
 #include "client/Response.hxx"
-#include "Partition.hxx"
 #include "Instance.hxx"
 #include "storage/Registry.hxx"
 #include "storage/CompositeStorage.hxx"
@@ -37,17 +35,16 @@
 #include "db/plugins/simple/SimpleDatabasePlugin.hxx"
 #include "db/update/Service.hxx"
 #include "TimePrint.hxx"
-#include "Idle.hxx"
+#include "IdleFlags.hxx"
 
+#include <cinttypes> /* for PRIu64 */
 #include <memory>
-
-#include <inttypes.h> /* for PRIu64 */
 
 gcc_pure
 static bool
 skip_path(const char *name_utf8) noexcept
 {
-	return strchr(name_utf8, '\n') != nullptr;
+	return std::strchr(name_utf8, '\n') != nullptr;
 }
 
 #if defined(_WIN32) && GCC_CHECK_VERSION(4,6)
@@ -146,7 +143,7 @@ print_storage_uri(Client &client, Response &r, const Storage &storage)
 }
 
 CommandResult
-handle_listmounts(Client &client, gcc_unused Request args, Response &r)
+handle_listmounts(Client &client, [[maybe_unused]] Request args, Response &r)
 {
 	Storage *_composite = client.GetInstance().storage;
 	if (_composite == nullptr) {
@@ -188,7 +185,7 @@ handle_mount(Client &client, Request args, Response &r)
 		return CommandResult::ERROR;
 	}
 
-	if (strchr(local_uri, '/') != nullptr) {
+	if (std::strchr(local_uri, '/') != nullptr) {
 		/* allow only top-level mounts for now */
 		/* TODO: eliminate this limitation after ensuring that
 		   UpdateQueue::Erase() really gets called for every

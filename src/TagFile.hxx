@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -30,7 +30,7 @@ class TagBuilder;
  * but does not fall back to generic scanners (APE and ID3) if no tags
  * were found (but the file was recognized).
  *
- * Throws on I/O error.
+ * Throws on error.
  *
  * @return true if the file was recognized (even if no metadata was
  * found)
@@ -43,7 +43,7 @@ ScanFileTagsNoGeneric(Path path, TagHandler &handler);
  * and falls back to generic scanners (APE and ID3) if no tags were
  * found (but the file was recognized).
  *
- * Throws on I/O error.
+ * Throws on error.
  *
  * @return true if the file was recognized (even if no metadata was
  * found)

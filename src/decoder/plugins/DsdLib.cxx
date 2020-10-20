@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -32,8 +32,6 @@
 #ifdef ENABLE_ID3TAG
 #include <id3tag.h>
 #endif
-
-#include <stdexcept>
 
 #include <string.h>
 #include <stdlib.h>
@@ -135,7 +133,7 @@ dsdlib_tag_id3(InputStream &is, TagHandler &handler,
 
 	const id3_length_t count = count64;
 
-	id3_byte_t *const id3_buf = new id3_byte_t[count];
+	auto *const id3_buf = new id3_byte_t[count];
 	if (id3_buf == nullptr)
 		return;
 
@@ -152,6 +150,5 @@ dsdlib_tag_id3(InputStream &is, TagHandler &handler,
 	scan_id3_tag(id3_tag, handler);
 
 	id3_tag_delete(id3_tag);
-	return;
 }
 #endif

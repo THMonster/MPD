@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -177,11 +177,11 @@ SoundCloudJsonData::EndMap() noexcept
 {
 	if (got_url > 1) {
 		got_url--;
-		return 1;
+		return true;
 	}
 
 	if (got_url == 0)
-		return 1;
+		return true;
 
 	/* got_url == 1, track finished, make it into a song */
 	got_url = 0;
@@ -288,17 +288,7 @@ static const char *const soundcloud_schemes[] = {
 	nullptr
 };
 
-const struct playlist_plugin soundcloud_playlist_plugin = {
-	"soundcloud",
-
-	soundcloud_init,
-	nullptr,
-	soundcloud_open_uri,
-	nullptr,
-
-	soundcloud_schemes,
-	nullptr,
-	nullptr,
-};
-
-
+const PlaylistPlugin soundcloud_playlist_plugin =
+	PlaylistPlugin("soundcloud", soundcloud_open_uri)
+	.WithInit(soundcloud_init)
+	.WithSchemes(soundcloud_schemes);

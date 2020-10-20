@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,8 +21,8 @@
 #include "PlaylistCommands.hxx"
 #include "Request.hxx"
 #include "Instance.hxx"
+#include "db/Selection.hxx"
 #include "db/DatabasePlaylist.hxx"
-#include "CommandError.hxx"
 #include "PlaylistSave.hxx"
 #include "PlaylistFile.hxx"
 #include "PlaylistError.hxx"
@@ -38,8 +38,8 @@
 #include "Mapper.hxx"
 #include "fs/AllocatedPath.hxx"
 #include "time/ChronoUtil.hxx"
-#include "util/UriUtil.hxx"
 #include "util/ConstBuffer.hxx"
+#include "util/UriExtract.hxx"
 #include "LocateUri.hxx"
 
 bool
@@ -60,14 +60,14 @@ print_spl_list(Response &r, const PlaylistVector &list)
 }
 
 CommandResult
-handle_save(Client &client, Request args, gcc_unused Response &r)
+handle_save(Client &client, Request args, [[maybe_unused]] Response &r)
 {
 	spl_save_playlist(args.front(), client.GetPlaylist());
 	return CommandResult::OK;
 }
 
 CommandResult
-handle_load(Client &client, Request args, gcc_unused Response &r)
+handle_load(Client &client, Request args, [[maybe_unused]] Response &r)
 {
 	const auto uri = LocateUri(UriPluginKind::PLAYLIST, args.front(),
 				   &client
@@ -132,7 +132,7 @@ handle_listplaylistinfo(Client &client, Request args, Response &r)
 }
 
 CommandResult
-handle_rm(gcc_unused Client &client, Request args, gcc_unused Response &r)
+handle_rm([[maybe_unused]] Client &client, Request args, [[maybe_unused]] Response &r)
 {
 	const char *const name = args.front();
 
@@ -141,7 +141,7 @@ handle_rm(gcc_unused Client &client, Request args, gcc_unused Response &r)
 }
 
 CommandResult
-handle_rename(gcc_unused Client &client, Request args, gcc_unused Response &r)
+handle_rename([[maybe_unused]] Client &client, Request args, [[maybe_unused]] Response &r)
 {
 	const char *const old_name = args[0];
 	const char *const new_name = args[1];
@@ -151,8 +151,8 @@ handle_rename(gcc_unused Client &client, Request args, gcc_unused Response &r)
 }
 
 CommandResult
-handle_playlistdelete(gcc_unused Client &client,
-		      Request args, gcc_unused Response &r)
+handle_playlistdelete([[maybe_unused]] Client &client,
+		      Request args, [[maybe_unused]] Response &r)
 {
 	const char *const name = args[0];
 	unsigned from = args.ParseUnsigned(1);
@@ -162,8 +162,8 @@ handle_playlistdelete(gcc_unused Client &client,
 }
 
 CommandResult
-handle_playlistmove(gcc_unused Client &client,
-		    Request args, gcc_unused Response &r)
+handle_playlistmove([[maybe_unused]] Client &client,
+		    Request args, [[maybe_unused]] Response &r)
 {
 	const char *const name = args.front();
 	unsigned from = args.ParseUnsigned(1);
@@ -174,8 +174,8 @@ handle_playlistmove(gcc_unused Client &client,
 }
 
 CommandResult
-handle_playlistclear(gcc_unused Client &client,
-		     Request args, gcc_unused Response &r)
+handle_playlistclear([[maybe_unused]] Client &client,
+		     Request args, [[maybe_unused]] Response &r)
 {
 	const char *const name = args.front();
 
@@ -184,7 +184,7 @@ handle_playlistclear(gcc_unused Client &client,
 }
 
 CommandResult
-handle_playlistadd(Client &client, Request args, gcc_unused Response &r)
+handle_playlistadd(Client &client, Request args, [[maybe_unused]] Response &r)
 {
 	const char *const playlist = args[0];
 	const char *const uri = args[1];
@@ -195,9 +195,10 @@ handle_playlistadd(Client &client, Request args, gcc_unused Response &r)
 	} else {
 #ifdef ENABLE_DATABASE
 		const Database &db = client.GetDatabaseOrThrow();
+		const DatabaseSelection selection(uri, true, nullptr);
 
 		search_add_to_playlist(db, client.GetStorage(),
-				       uri, playlist, nullptr);
+				       playlist, selection);
 #else
 		r.Error(ACK_ERROR_NO_EXIST, "directory or file not found");
 		return CommandResult::ERROR;
@@ -208,7 +209,7 @@ handle_playlistadd(Client &client, Request args, gcc_unused Response &r)
 }
 
 CommandResult
-handle_listplaylists(gcc_unused Client &client, gcc_unused Request args,
+handle_listplaylists([[maybe_unused]] Client &client, [[maybe_unused]] Request args,
 		     Response &r)
 {
 	print_spl_list(r, ListPlaylistFiles());

@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -37,6 +37,7 @@ public:
 		 output(normal_size, peak_size) {
 	}
 
+	using BufferedSocket::GetEventLoop;
 	using BufferedSocket::IsDefined;
 
 	void Close() noexcept {
@@ -68,7 +69,7 @@ protected:
 	/* virtual methods from class SocketMonitor */
 	bool OnSocketReady(unsigned flags) noexcept override;
 
-	virtual void OnIdle() noexcept override;
+	void OnIdle() noexcept override;
 };
 
 #endif

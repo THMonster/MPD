@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -33,7 +33,7 @@
 #include "Main.hxx"
 #endif
 
-#include <assert.h>
+#include <cassert>
 
 /**
  * The absolute path of the playlist directory encoded in the
@@ -66,10 +66,10 @@ map_uri_fs(const char *uri) noexcept
 	assert(uri != nullptr);
 	assert(*uri != '/');
 
-	if (instance->storage == nullptr)
+	if (global_instance->storage == nullptr)
 		return nullptr;
 
-	const auto music_dir_fs = instance->storage->MapFS("");
+	const auto music_dir_fs = global_instance->storage->MapFS("");
 	if (music_dir_fs.IsNull())
 		return nullptr;
 
@@ -84,10 +84,10 @@ std::string
 map_fs_to_utf8(Path path_fs) noexcept
 {
 	if (path_fs.IsAbsolute()) {
-		if (instance->storage == nullptr)
+		if (global_instance->storage == nullptr)
 			return std::string();
 
-		const auto music_dir_fs = instance->storage->MapFS("");
+		const auto music_dir_fs = global_instance->storage->MapFS("");
 		if (music_dir_fs.IsNull())
 			return std::string();
 
@@ -119,7 +119,7 @@ map_spl_utf8_to_fs(const char *name) noexcept
 	filename_utf8.append(PLAYLIST_FILE_SUFFIX);
 
 	const auto filename_fs =
-		AllocatedPath::FromUTF8(filename_utf8.c_str());
+		AllocatedPath::FromUTF8(filename_utf8);
 	if (filename_fs.IsNull())
 		return nullptr;
 

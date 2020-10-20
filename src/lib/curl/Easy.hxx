@@ -31,6 +31,7 @@
 #define CURL_EASY_HXX
 
 #include "String.hxx"
+#include "util/Compiler.h"
 
 #include <curl/curl.h>
 
@@ -55,6 +56,11 @@ public:
 	{
 		if (handle == nullptr)
 			throw std::runtime_error("curl_easy_init() failed");
+	}
+
+	explicit CurlEasy(const char *url)
+		:CurlEasy() {
+		SetURL(url);
 	}
 
 	/**
@@ -114,6 +120,10 @@ public:
 		SetOption(CURLOPT_USERPWD, userpwd);
 	}
 
+	void SetUpload(bool value=true) {
+		SetOption(CURLOPT_UPLOAD, (long)value);
+	}
+
 	void SetNoProgress(bool value=true) {
 		SetOption(CURLOPT_NOPROGRESS, (long)value);
 	}
@@ -128,6 +138,10 @@ public:
 
 	void SetConnectTimeout(long timeout) {
 		SetOption(CURLOPT_CONNECTTIMEOUT, timeout);
+	}
+
+	void SetTimeout(long timeout) {
+		SetOption(CURLOPT_TIMEOUT, timeout);
 	}
 
 	void SetHeaderFunction(size_t (*function)(char *buffer, size_t size,
@@ -145,6 +159,13 @@ public:
 		SetOption(CURLOPT_WRITEDATA, userdata);
 	}
 
+	void SetReadFunction(size_t (*function)(char *ptr, size_t size,
+						size_t nmemb, void *userdata),
+			      void *userdata) {
+		SetOption(CURLOPT_READFUNCTION, function);
+		SetOption(CURLOPT_READDATA, userdata);
+	}
+
 	void SetNoBody(bool value=true) {
 		SetOption(CURLOPT_NOBODY, (long)value);
 	}
@@ -160,6 +181,28 @@ public:
 
 	void SetHttpPost(const struct curl_httppost *post) {
 		SetOption(CURLOPT_HTTPPOST, post);
+	}
+
+	template<typename T>
+	bool GetInfo(CURLINFO info, T value_r) const noexcept {
+		return ::curl_easy_getinfo(handle, info, value_r) == CURLE_OK;
+	}
+
+	/**
+	 * Returns the response body's size, or -1 if that is unknown.
+	 */
+	gcc_pure
+	int64_t GetContentLength() const noexcept {
+		double value;
+		return GetInfo(CURLINFO_CONTENT_LENGTH_DOWNLOAD, &value)
+			? (int64_t)value
+			: -1;
+	}
+
+	void Perform() {
+		CURLcode code = curl_easy_perform(handle);
+		if (code != CURLE_OK)
+			throw std::runtime_error(curl_easy_strerror(code));
 	}
 
 	bool Unpause() noexcept {

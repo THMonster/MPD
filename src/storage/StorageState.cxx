@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -156,7 +156,7 @@ storage_state_get_hash(const Instance &instance)
 
 	boost::crc_32_type result;
 
-	for (auto mount: mounts) {
+	for (const auto& mount : mounts) {
 		result.process_bytes(mount.c_str(), mount.length());
 	}
 

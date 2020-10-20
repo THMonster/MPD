@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,12 +23,10 @@
 #include "IdleMonitor.hxx"
 #include "TimerEvent.hxx"
 #include "SocketMonitor.hxx"
-#include "util/Compiler.h"
 
+#include <cassert>
 #include <forward_list>
 #include <iterator>
-
-#include <assert.h>
 
 #ifndef _WIN32
 struct pollfd;
@@ -228,7 +226,7 @@ protected:
 	 *
 	 * @return timeout or a negative value for no timeout
 	 */
-	virtual std::chrono::steady_clock::duration PrepareSockets() noexcept = 0;
+	virtual Event::Duration PrepareSockets() noexcept = 0;
 
 	/**
 	 * At least one socket is ready or the timeout has expired.

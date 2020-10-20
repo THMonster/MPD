@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,32 +24,21 @@
  * plugins.
  */
 
+#include "NullFilterPlugin.hxx"
 #include "filter/FilterPlugin.hxx"
-#include "filter/Filter.hxx"
+#include "filter/NullFilter.hxx"
 #include "filter/Prepared.hxx"
-#include "filter/FilterRegistry.hxx"
-#include "AudioFormat.hxx"
 #include "util/Compiler.h"
-#include "util/ConstBuffer.hxx"
-
-class NullFilter final : public Filter {
-public:
-	explicit NullFilter(const AudioFormat &af):Filter(af) {}
-
-	virtual ConstBuffer<void> FilterPCM(ConstBuffer<void> src) override {
-		return src;
-	}
-};
 
 class PreparedNullFilter final : public PreparedFilter {
 public:
-	virtual std::unique_ptr<Filter> Open(AudioFormat &af) override {
+	std::unique_ptr<Filter> Open(AudioFormat &af) override {
 		return std::make_unique<NullFilter>(af);
 	}
 };
 
 static std::unique_ptr<PreparedFilter>
-null_filter_init(gcc_unused const ConfigBlock &block)
+null_filter_init([[maybe_unused]] const ConfigBlock &block)
 {
 	return std::make_unique<PreparedNullFilter>();
 }

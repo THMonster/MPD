@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,10 +20,11 @@
 #include "SndfileDecoderPlugin.hxx"
 #include "../DecoderAPI.hxx"
 #include "input/InputStream.hxx"
-#include "CheckAudioFormat.hxx"
+#include "pcm/CheckAudioFormat.hxx"
 #include "tag/Handler.hxx"
 #include "util/Domain.hxx"
 #include "util/ScopeExit.hxx"
+#include "util/StringView.hxx"
 #include "Log.hxx"
 
 #include <exception>
@@ -33,7 +34,7 @@
 static constexpr Domain sndfile_domain("sndfile");
 
 static bool
-sndfile_init(gcc_unused const ConfigBlock &block)
+sndfile_init([[maybe_unused]] const ConfigBlock &block)
 {
        LogDebug(sndfile_domain, sf_version_string());
        return true;
@@ -53,8 +54,8 @@ struct SndfileInputStream {
 static sf_count_t
 sndfile_vio_get_filelen(void *user_data)
 {
-	SndfileInputStream &sis = *(SndfileInputStream *)user_data;
-	const InputStream &is = sis.is;
+	const auto &sis = *(SndfileInputStream *)user_data;
+	const auto &is = sis.is;
 
 	if (!is.KnownSize())
 		return -1;
@@ -106,9 +107,9 @@ sndfile_vio_read(void *ptr, sf_count_t count, void *user_data)
 }
 
 static sf_count_t
-sndfile_vio_write(gcc_unused const void *ptr,
-		  gcc_unused sf_count_t count,
-		  gcc_unused void *user_data)
+sndfile_vio_write([[maybe_unused]] const void *ptr,
+		  [[maybe_unused]] sf_count_t count,
+		  [[maybe_unused]] void *user_data)
 {
 	/* no writing! */
 	return -1;
@@ -117,8 +118,8 @@ sndfile_vio_write(gcc_unused const void *ptr,
 static sf_count_t
 sndfile_vio_tell(void *user_data)
 {
-	SndfileInputStream &sis = *(SndfileInputStream *)user_data;
-	const InputStream &is = sis.is;
+	const auto &sis = *(SndfileInputStream *)user_data;
+	const auto &is = sis.is;
 
 	return is.GetOffset();
 }
@@ -330,15 +331,8 @@ static const char *const sndfile_mime_types[] = {
 	nullptr
 };
 
-const struct DecoderPlugin sndfile_decoder_plugin = {
-	"sndfile",
-	sndfile_init,
-	nullptr,
-	sndfile_stream_decode,
-	nullptr,
-	nullptr,
-	sndfile_scan_stream,
-	nullptr,
-	sndfile_suffixes,
-	sndfile_mime_types,
-};
+constexpr DecoderPlugin sndfile_decoder_plugin =
+	DecoderPlugin("sndfile", sndfile_stream_decode, sndfile_scan_stream)
+	.WithInit(sndfile_init)
+	.WithSuffixes(sndfile_suffixes)
+	.WithMimeTypes(sndfile_mime_types);

@@ -11,6 +11,7 @@ endif
 
 sqlite = static_library(
   'sqlite',
+  'Database.cxx',
   'Error.cxx',
   include_directories: inc,
   dependencies: [

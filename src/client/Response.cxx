@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -29,46 +29,56 @@ Response::GetTagMask() const noexcept
 }
 
 bool
-Response::Write(const void *data, size_t length)
+Response::Write(const void *data, size_t length) noexcept
 {
 	return client.Write(data, length);
 }
 
 bool
-Response::Write(const char *data)
+Response::Write(const char *data) noexcept
 {
 	return client.Write(data);
 }
 
 bool
-Response::FormatV(const char *fmt, va_list args)
+Response::FormatV(const char *fmt, std::va_list args) noexcept
 {
 	return Write(FormatStringV(fmt, args).c_str());
 }
 
 bool
-Response::Format(const char *fmt, ...)
+Response::Format(const char *fmt, ...) noexcept
 {
-	va_list args;
+	std::va_list args;
 	va_start(args, fmt);
 	bool success = FormatV(fmt, args);
 	va_end(args);
 	return success;
 }
 
+bool
+Response::WriteBinary(ConstBuffer<void> payload) noexcept
+{
+	assert(payload.size <= MAX_BINARY_SIZE);
+
+	return Format("binary: %zu\n", payload.size) &&
+		Write(payload.data, payload.size) &&
+		Write("\n");
+}
+
 void
-Response::Error(enum ack code, const char *msg)
+Response::Error(enum ack code, const char *msg) noexcept
 {
 	FormatError(code, "%s", msg);
 }
 
 void
-Response::FormatError(enum ack code, const char *fmt, ...)
+Response::FormatError(enum ack code, const char *fmt, ...) noexcept
 {
 	Format("ACK [%i@%u] {%s} ",
 	       (int)code, list_index, command);
 
-	va_list args;
+	std::va_list args;
 	va_start(args, fmt);
 	FormatV(fmt, args);
 	va_end(args);

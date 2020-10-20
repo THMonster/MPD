@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2018 Max Kellermann <max.kellermann@gmail.com>
+ * Copyright 2016-2020 Max Kellermann <max.kellermann@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,10 +30,9 @@
 #ifndef EXCEPTION_HXX
 #define EXCEPTION_HXX
 
-#include "Compiler.h"
-
 #include <exception>
 #include <string>
+#include <utility>
 
 /**
  * Throws the specified exception.  There is an overload for
@@ -41,14 +40,14 @@
  * the std::exception_ptr itself.
  */
 template<typename T>
-gcc_noreturn
+[[noreturn]]
 inline void
 ThrowException(T &&t)
 {
-	throw t;
+	throw std::forward<T>(t);
 }
 
-gcc_noreturn
+[[noreturn]]
 inline void
 ThrowException(std::exception_ptr ep)
 {

@@ -1,3 +1,56 @@
+ver 0.22.1 (2020/10/17)
+* decoder
+  - opus: apply the OpusHead output gain even if there is no EBU R128 tag
+  - opus: fix track/album ReplayGain fallback
+* output
+  - alsa: don't deadlock when the ALSA driver is buggy
+  - jack, pulse: reduce the delay when stopping or pausing playback
+* playlist
+  - cue: fix two crash bugs
+* state_file: fix the state_file_interval setting
+
+ver 0.22 (2020/09/23)
+* protocol
+  - "findadd"/"searchadd"/"searchaddpl" support the "sort" and
+    "window" parameters
+  - add command "readpicture" to download embedded pictures
+  - command "moveoutput" moves an output between partitions
+  - command "delpartition" deletes a partition
+  - show partition name in "status" response
+* tags
+  - new tags "Grouping" (for ID3 "TIT1"), "Work" and "Conductor"
+* input
+  - curl: support "charset" parameter in URI fragment
+  - ffmpeg: allow partial reads
+  - io_uring: new plugin for local files on Linux (using liburing)
+  - smbclient: close unused SMB/CIFS connections
+* database
+  - upnp: drop support for libupnp versions older than 1.8
+* playlist
+  - cue: integrate contents in database
+* decoder
+  - ffmpeg: support RTSP
+  - mad: remove option "gapless", always do gapless
+  - sidplay: add option "default_genre"
+  - sidplay: map SID name field to "Album" tag
+  - sidplay: add support for new song length format with libsidplayfp 2.0
+  - vorbis, opus: improve seeking accuracy
+* playlist
+  - flac: support reading CUE sheets from remote FLAC files
+* filter
+  - ffmpeg: new plugin based on FFmpeg's libavfilter library
+  - hdcd: new plugin based on FFmpeg's "af_hdcd" for HDCD playback
+  - volume: convert S16 to S24 to preserve quality and reduce dithering noise
+  - dsd: add integer-only DSD to PCM converter
+* output
+  - jack: add option "auto_destination_ports"
+  - jack: report error details
+  - pulse: add option "media_role"
+  - solaris: support S8 and S32
+* lower the real-time priority from 50 to 40
+* switch to C++17
+  - GCC 8 or clang 5 (or newer) recommended
+
 ver 0.21.26 (2020/09/21)
 * database
   - inotify: obey ".mpdignore" files

@@ -27,7 +27,7 @@ The default plugin. Stores a copy of the database in memory. A file is used for 
 proxy
 -----
 
-Provides access to the database of another :program:`MPD` instance using libmpdclient. This is useful when you run mount the music directory via NFS/SMB, and the file server already runs a :program:`MPD` instance. Only the file server needs to update the database.
+Provides access to the database of another :program:`MPD` instance using libmpdclient. This is useful when you mount the music directory via NFS/SMB, and the file server already runs a :program:`MPD` instance. Only the file server needs to update the database.
 
 .. list-table::
    :widths: 20 80                     
@@ -116,7 +116,7 @@ Provides a list of SMB/CIFS servers on the local network.
 udisks
 ------
 
-Queries the udisks2 daemon via D-Bus and obtain a list of file systems (e.g. USB sticks or other removable media).
+Queries the udisks2 daemon via D-Bus and obtains a list of file systems (e.g. USB sticks or other removable media).
 
 upnp
 ----
@@ -131,15 +131,39 @@ Input plugins
 alsa
 ----
 
-Allows :program:`MPD` on Linux to play audio directly from a soundcard using the scheme alsa://. Audio is formatted as 44.1 kHz 16-bit stereo (CD format). Examples:
+Allows :program:`MPD` on Linux to play audio directly from a soundcard using the scheme alsa://. Audio is by default formatted as 48 kHz 16-bit stereo, but this default can be overidden by a config file setting or by the URI. Examples:
 
 .. code-block:: none
 
-    mpc add alsa:// plays audio from device hw:0,0
+    mpc add alsa:// plays audio from device default
 
 .. code-block:: none
 
-    mpc add alsa://hw:1,0 plays audio from device hw:1,0 cdio_paranoia
+    mpc add alsa://hw:1,0 plays audio from device hw:1,0
+
+.. code-block:: none
+
+    mpc add alsa://hw:1,0?format=44100:16:2 plays audio from device hw:1,0 sampling 16-bit stereo at 44.1kHz.
+
+.. list-table::
+   :widths: 20 80
+   :header-rows: 1
+
+   * - Setting
+     - Description
+   * - **default_device NAME**
+     - The alsa device id to use when none is specified in the URI.
+   * - **default_format F**
+     - The sampling rate, size and channels to use. Wildcards are not allowed.
+
+       Example - "44100:16:2"
+
+   * - **auto_resample yes|no**
+     - If set to no, then libasound will not attempt to resample. In this case, the user is responsible for ensuring that the requested sample rate can be produced natively by the device, otherwise an error will occur.
+   * - **auto_channels yes|no**
+     - If set to no, then libasound will not attempt to convert between different channel numbers. The user must ensure that the device supports the requested channels when sampling.
+   * - **auto_format yes|no**
+     - If set to no, then libasound will not attempt to convert between different sample formats (16 bit, 24 bit, floating point, ...). Again the user must ensure that the requested format is available natively from the device.
 
 cdio_paranoia
 -------------
@@ -326,6 +350,8 @@ faad
 
 Decodes AAC files using libfaad.
 
+.. _decoder_ffmpeg:
+
 ffmpeg
 ------
 
@@ -395,29 +421,21 @@ Video game music file emulator based on `game-music-emu <https://bitbucket.org/m
      - Description
    * - **accuracy yes|no**
      - Enable more accurate sound emulation.
+   * - **default_fade**
+     - The default fade-out time, in seconds. Used by songs that don't specify their own fade-out time.
 
 hybrid_dsd
 ----------
 
 `Hybrid-DSD
 <http://dsdmaster.blogspot.de/p/bitperfect-introduces-hybrid-dsd-file.html>`_
-is a MP4 container file (:file:`*.m4a`) which contains both ALAC and
+is an MP4 container file (:file:`*.m4a`) which contains both ALAC and
 DSD data. It is disabled by default, and works only if you explicitly
 enable it. Without this plugin, the ALAC parts gets handled by the
-`FFmpeg decoder plugin
-<https://www.musicpd.org/doc/user/decoder_plugins.html#ffmpeg_decoder>`_. This
+:ref:`FFmpeg decoder plugin <decoder_ffmpeg>`. This
 plugin should be enabled only if you have a bit-perfect playback path
 to a DSD-capable DAC; for everybody else, playing back the ALAC copy
 of the file is better.
-
-.. list-table::
-   :widths: 20 80
-   :header-rows: 1
-
-   * - Setting
-     - Description
-   * - **gapless yes|no**
-     - This specifies whether to support gapless playback of MP3s which have the necessary headers. Useful if your MP3s have headers with incorrect information. If you have such MP3s, it is highly recommended that you fix them using `vbrfix <http://www.willwap.co.uk/Programs/vbrfix.php>`_ instead of disabling gapless MP3 playback. The default is to support gapless MP3 playback.
 
 mad
 ---
@@ -462,7 +480,9 @@ Decodes Musepack files using `libmpcdec <http://www.musepack.net/>`_.
 mpg123
 ------
 
-Decodes MP3 files using `libmpg123 <http://www.mpg123.de/>`_.
+Decodes MP3 files using `libmpg123 <http://www.mpg123.de/>`_. Currently, this
+decoder does not support streams (e.g. archived files, remote files over HTTP,
+...), only regular local files.
 
 opus
 ----
@@ -472,7 +492,7 @@ Decodes Opus files using `libopus <http://www.opus-codec.org/>`_.
 pcm
 ---
 
-Read raw PCM samples. It understands the "audio/L16" MIME type with parameters "rate" and "channels" according to RFC 2586. It also understands the MPD-specific MIME type "audio/x-mpd-float".
+Reads raw PCM samples. It understands the "audio/L16" MIME type with parameters "rate" and "channels" according to RFC 2586. It also understands the MPD-specific MIME type "audio/x-mpd-float".
 
 sidplay
 -------
@@ -486,9 +506,11 @@ C64 SID decoder based on `libsidplayfp <https://sourceforge.net/projects/sidplay
    * - Setting
      - Description
    * - **songlength_database PATH**
-     - Location of your songlengths file, as distributed with the HVSC. The sidplay plugin checks this for matching MD5 fingerprints. See http://www.hvsc.c64.org/download/C64Music/DOCUMENTS/Songlengths.faq.
+     - Location of your songlengths file, as distributed with the HVSC. The sidplay plugin checks this for matching MD5 fingerprints. See http://www.hvsc.c64.org/download/C64Music/DOCUMENTS/Songlengths.faq. New songlength format support requires libsidplayfp 2.0 or later.
    * - **default_songlength SECONDS**
      - This is the default playing time in seconds for songs not in the songlength database, or in case you're not using a database. A value of 0 means play indefinitely.
+   * - **default_genre GENRE**
+     - Optional default genre for SID songs.
    * - **filter yes|no**
      - Turns the SID filter emulation on or off.
    * - **kernal**
@@ -724,6 +746,25 @@ Valid quality values for libsoxr:
 * "medium"
 * "low"
 * "quick"
+* "custom"
+
+If the quality is set to custom also the following settings are available:
+
+   * - Name
+     - Description
+   * - **precision**
+     - The precision in bits. Valid values 16,20,24,28 and 32  bits.
+   * - **phase_response**
+     - Between the 0-100, Where 0=MINIMUM_PHASE and 50=LINEAR_PHASE.
+   * - **passband_end**
+     - The % of source bandwidth where to start filtering. Typical between the 90-99.7.
+   * - **stopband_begin**
+     - The % of the source bandwidth Where the anti aliasing filter start. Value 100+.
+   * - **attenuation**
+     - Reduction in dB's to prevent clipping from the resampling process.
+   * - **flags**
+     - Bitmask with additional option see soxr documentation for specific flags.
+
 
 .. _output_plugins:
 
@@ -868,6 +909,10 @@ The jack plugin connects to a `JACK server <http://jackaudio.org/>`_.
      - The names of the JACK source ports to be created. By default, the ports "left" and "right" are created. To use more ports, you have to tweak this option.
    * - **destination_ports A,B**
      - The names of the JACK destination ports to connect to.
+   * - **auto_destination_ports yes|no**
+     - If set to *yes*, then MPD will automatically create connections between the send ports of
+       MPD and receive ports of the first sound card; if set to *no*, then MPD will only create
+       connections to the contents of *destination_ports* if it is set. Enabled by default.
    * - **ringbuffer_size NBYTES**
      - Sets the size of the ring buffer for each channel. Do not configure this value unless you know what you're doing.
 
@@ -1002,6 +1047,8 @@ The pulse plugin connects to a `PulseAudio <http://www.freedesktop.org/wiki/Soft
      - Sets the host name of the PulseAudio server. By default, :program:`MPD` connects to the local PulseAudio server.
    * - **sink NAME**
      - Specifies the name of the PulseAudio sink :program:`MPD` should play on.
+   * - **media_role ROLE**
+     - Specifies a custom media role that :program:`MPD` reports to PulseAudio. Default is "music". (optional).
    * - **scale_volume FACTOR**
      - Specifies a linear scaling coefficient (ranging from 0.5 to 5.0) to apply when adjusting volume through :program:`MPD`.  For example, chosing a factor equal to ``"0.7"`` means that setting the volume to 100 in :program:`MPD` will set the PulseAudio volume to 70%, and a factor equal to ``"3.5"`` means that volume 100 in :program:`MPD` corresponds to a 350% PulseAudio volume.
 
@@ -1090,10 +1137,57 @@ The "Solaris" plugin runs only on SUN Solaris, and plays via /dev/audio.
      - Sets the path of the audio device, defaults to /dev/audio.
 
 
+wasapi
+------
+
+The `Windows Audio Session API <https://docs.microsoft.com/en-us/windows/win32/coreaudio/wasapi>`_ plugin uses WASAPI, which is supported started from Windows Vista. It is recommended if you are using Windows.
+
+.. list-table::
+   :widths: 20 80
+   :header-rows: 1
+
+   * - Setting
+     - Description
+   * - **device NAME**
+     - Sets the device which should be used. This can be any valid audio device name, or index number. The default value is "", which makes WASAPI choose the default output device.
+   * - **enumerate yes|no**
+     - Enumerate all devices in log while playing started. Useful for device configuration. The default value is "no".
+   * - **exclusive yes|no**
+     - Exclusive mode blocks all other audio source, and get best audio quality without resampling. Stopping playing release the exclusive control of the output device. The default value is "no".
+
+
 .. _filter_plugins:
 
 Filter plugins
 ==============
+
+ffmpeg
+------
+
+Configures a FFmpeg filter graph.
+
+This plugin requires building with ``libavfilter`` (FFmpeg).
+
+.. list-table::
+   :widths: 20 80
+   :header-rows: 1
+
+   * - Setting
+     - Description
+   * - **graph "..."**
+     - Specifies the ``libavfilter`` graph; read the `FFmpeg
+       documentation
+       <https://libav.org/documentation/libavfilter.html#Filtergraph-syntax-1>`_
+       for details
+
+
+hdcd
+----
+
+Decode `HDCD
+<https://en.wikipedia.org/wiki/High_Definition_Compatible_Digital>`_.
+
+This plugin requires building with ``libavfilter`` (FFmpeg).
 
 normalize
 ---------
@@ -1177,3 +1271,19 @@ Download playlist from SoundCloud. It accepts URIs starting with soundcloud://.
 xspf
 ----
 Reads XSPF playlist files. 
+
+
+Archive plugins
+===============
+
+bz2
+---
+Allows to load single bzip2 compressed files using `libbz2 <https://www.sourceware.org/bzip2/>`_. Does not support seeking.
+
+zzip
+----
+Allows to load music files from ZIP archives using `zziplib <http://zziplib.sourceforge.net/>`_.
+
+iso
+---
+Allows to load music files from ISO 9660 images using `libcdio <https://www.gnu.org/software/libcdio/>`_.

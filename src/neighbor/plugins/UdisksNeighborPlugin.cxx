@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -36,9 +36,7 @@
 #include "util/Manual.hxx"
 #include "Log.hxx"
 
-#include <stdexcept>
 #include <string>
-#include <list>
 #include <map>
 
 static NeighborInfo
@@ -251,7 +249,7 @@ UdisksNeighborExplorer::HandleMessage(DBusConnection *, DBusMessage *message) no
 	    dbus_message_has_signature(message, InterfacesAddedType::value)) {
 		RecurseInterfaceDictEntry(ReadMessageIter(*message), [this](const char *path, auto &&i){
 				UDisks2::Object o(path);
-				UDisks2::ParseObject(o, std::move(i));
+				UDisks2::ParseObject(o, std::forward<decltype(i)>(i));
 				if (o.IsValid())
 					this->Insert(std::move(o));
 			});
@@ -279,7 +277,7 @@ UdisksNeighborExplorer::HandleMessage(DBusConnection *connection,
 static std::unique_ptr<NeighborExplorer>
 udisks_neighbor_create(EventLoop &event_loop,
 		     NeighborListener &listener,
-		     gcc_unused const ConfigBlock &block)
+		     [[maybe_unused]] const ConfigBlock &block)
 {
 	return std::make_unique<UdisksNeighborExplorer>(event_loop, listener);
 }

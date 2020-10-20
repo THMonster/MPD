@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,13 +18,12 @@
  */
 
 #include "Converter.hxx"
-#include "util/Macros.hxx"
 #include "util/AllocatedString.hxx"
 #include "util/AllocatedArray.hxx"
-#include "util/ConstBuffer.hxx"
 #include "util/FormatString.hxx"
 #include "config.h"
 
+#include <iterator>
 #include <stdexcept>
 
 #include <string.h>
@@ -47,7 +46,7 @@ IcuConverter::~IcuConverter()
 
 #ifdef HAVE_ICU_CONVERTER
 
-IcuConverter *
+std::unique_ptr<IcuConverter>
 IcuConverter::Create(const char *charset)
 {
 #ifdef HAVE_ICU
@@ -57,7 +56,7 @@ IcuConverter::Create(const char *charset)
 		throw std::runtime_error(FormatString("Failed to initialize charset '%s': %s",
 						      charset, u_errorName(code)).c_str());
 
-	return new IcuConverter(converter);
+	return std::unique_ptr<IcuConverter>(new IcuConverter(converter));
 #elif defined(HAVE_ICONV)
 	iconv_t to = iconv_open("utf-8", charset);
 	iconv_t from = iconv_open(charset, "utf-8");
@@ -71,7 +70,7 @@ IcuConverter::Create(const char *charset)
 				  charset);
 	}
 
-	return new IcuConverter(to, from);
+	return std::unique_ptr<IcuConverter>(new IcuConverter(to, from));
 #endif
 }
 
@@ -79,13 +78,13 @@ IcuConverter::Create(const char *charset)
 #elif defined(HAVE_ICONV)
 
 static AllocatedString<char>
-DoConvert(iconv_t conv, const char *src)
+DoConvert(iconv_t conv, std::string_view src)
 {
 	// TODO: dynamic buffer?
 	char buffer[4096];
-	char *in = const_cast<char *>(src);
+	char *in = const_cast<char *>(src.data());
 	char *out = buffer;
-	size_t in_left = strlen(src);
+	size_t in_left = src.size();
 	size_t out_left = sizeof(buffer);
 
 	size_t n = iconv(conv, &in, &in_left, &out, &out_left);
@@ -96,13 +95,13 @@ DoConvert(iconv_t conv, const char *src)
 	if (in_left > 0)
 		throw std::runtime_error("Charset conversion failed");
 
-	return AllocatedString<>::Duplicate(buffer, sizeof(buffer) - out_left);
+	return AllocatedString<>::Duplicate({buffer, sizeof(buffer) - out_left});
 }
 
 #endif
 
 AllocatedString<char>
-IcuConverter::ToUTF8(const char *s) const
+IcuConverter::ToUTF8(std::string_view s) const
 {
 #ifdef HAVE_ICU
 	const std::lock_guard<Mutex> protect(mutex);
@@ -111,12 +110,12 @@ IcuConverter::ToUTF8(const char *s) const
 
 	// TODO: dynamic buffer?
 	UChar buffer[4096], *target = buffer;
-	const char *source = s;
+	const char *source = s.data();
 
 	UErrorCode code = U_ZERO_ERROR;
 
-	ucnv_toUnicode(converter, &target, buffer + ARRAY_SIZE(buffer),
-		       &source, source + strlen(source),
+	ucnv_toUnicode(converter, &target, buffer + std::size(buffer),
+		       &source, source + s.size(),
 		       nullptr, true, &code);
 	if (code != U_ZERO_ERROR)
 		throw std::runtime_error(FormatString("Failed to convert to Unicode: %s",
@@ -130,7 +129,7 @@ IcuConverter::ToUTF8(const char *s) const
 }
 
 AllocatedString<char>
-IcuConverter::FromUTF8(const char *s) const
+IcuConverter::FromUTF8(std::string_view s) const
 {
 #ifdef HAVE_ICU
 	const std::lock_guard<Mutex> protect(mutex);
@@ -144,7 +143,7 @@ IcuConverter::FromUTF8(const char *s) const
 	const UChar *source = u.begin();
 	UErrorCode code = U_ZERO_ERROR;
 
-	ucnv_fromUnicode(converter, &target, buffer + ARRAY_SIZE(buffer),
+	ucnv_fromUnicode(converter, &target, buffer + std::size(buffer),
 			 &source, u.end(),
 			 nullptr, true, &code);
 
@@ -152,7 +151,7 @@ IcuConverter::FromUTF8(const char *s) const
 		throw std::runtime_error(FormatString("Failed to convert from Unicode: %s",
 						      u_errorName(code)).c_str());
 
-	return AllocatedString<>::Duplicate(buffer, target);
+	return AllocatedString<>::Duplicate({buffer, size_t(target - buffer)});
 
 #elif defined(HAVE_ICONV)
 	return DoConvert(from_utf8, s);

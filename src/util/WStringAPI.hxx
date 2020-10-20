@@ -52,14 +52,14 @@ gcc_pure gcc_nonnull_all
 static inline const wchar_t *
 StringFind(const wchar_t *haystack, wchar_t needle, size_t size) noexcept
 {
-	return wmemchr(haystack, needle, size);
+	return std::wmemchr(haystack, needle, size);
 }
 
 gcc_pure gcc_nonnull_all
 static inline wchar_t *
 StringFind(wchar_t *haystack, wchar_t needle, size_t size) noexcept
 {
-	return wmemchr(haystack, needle, size);
+	return std::wmemchr(haystack, needle, size);
 }
 
 gcc_pure gcc_nonnull_all
@@ -88,6 +88,21 @@ static inline wchar_t *
 StringFindLast(wchar_t *haystack, wchar_t needle) noexcept
 {
 	return wcsrchr(haystack, needle);
+}
+
+gcc_pure gcc_nonnull_all
+static inline const wchar_t *
+StringFindLast(const wchar_t *haystack, wchar_t needle, size_t size) noexcept
+{
+	/* there's no wmemrchr() unfortunately */
+	const auto *p = haystack + size;
+	while (p > haystack) {
+		--p;
+		if (*p == needle)
+			return p;
+	}
+
+	return nullptr;
 }
 
 gcc_pure gcc_nonnull_all
@@ -124,6 +139,13 @@ static inline int
 StringCompare(const wchar_t *a, const wchar_t *b) noexcept
 {
 	return wcscmp(a, b);
+}
+
+gcc_pure gcc_nonnull_all
+static inline int
+StringCompare(const wchar_t *a, const wchar_t *b, size_t n) noexcept
+{
+	return wcsncmp(a, b, n);
 }
 
 /**

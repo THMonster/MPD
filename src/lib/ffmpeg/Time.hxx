@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -28,13 +28,20 @@ extern "C" {
 #include <libavutil/mathematics.h>
 }
 
-#include <assert.h>
-#include <stdint.h>
+#include <cassert>
+#include <cstdint>
 
 /* suppress the ffmpeg compatibility macro */
 #ifdef SampleFormat
 #undef SampleFormat
 #endif
+
+/* redefine AV_TIME_BASE_Q because libavutil's macro definition is a
+   compound literal, which is illegal in C++ */
+#ifdef AV_TIME_BASE_Q
+#undef AV_TIME_BASE_Q
+#endif
+static constexpr AVRational AV_TIME_BASE_Q{1, AV_TIME_BASE};
 
 /**
  * Convert a FFmpeg time stamp to a floating point value (in seconds).
@@ -53,7 +60,7 @@ FfmpegTimeToDouble(int64_t t, const AVRational time_base) noexcept
  * Convert a std::ratio to a #AVRational.
  */
 template<typename Ratio>
-static inline constexpr AVRational
+constexpr AVRational
 RatioToAVRational()
 {
 	return { Ratio::num, Ratio::den };
@@ -99,7 +106,7 @@ ToFfmpegTime(SongTime t, const AVRational time_base) noexcept
 /**
  * Replace #AV_NOPTS_VALUE with the given fallback.
  */
-static constexpr int64_t
+constexpr int64_t
 FfmpegTimestampFallback(int64_t t, int64_t fallback)
 {
 	return gcc_likely(t != int64_t(AV_NOPTS_VALUE))

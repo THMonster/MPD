@@ -34,7 +34,8 @@
 #include "StringBuffer.hxx"
 #include "Compiler.h"
 
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 
 /**
  * Format the given byte sequence into a null-terminated hexadecimal

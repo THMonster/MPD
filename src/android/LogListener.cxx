@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,7 +24,8 @@
 #include "util/FormatString.hxx"
 
 void
-LogListener::OnLog(JNIEnv *env, int priority, const char *fmt, ...) const
+LogListener::OnLog(JNIEnv *env, int priority,
+		   const char *fmt, ...) const noexcept
 {
 	assert(env != nullptr);
 
@@ -35,7 +36,7 @@ LogListener::OnLog(JNIEnv *env, int priority, const char *fmt, ...) const
 
 	assert(method);
 
-	va_list args;
+	std::va_list args;
 	va_start(args, fmt);
 	const auto log = FormatStringV(fmt, args);
 	va_end(args);

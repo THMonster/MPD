@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2019 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -22,16 +22,16 @@
 
 #include "tag/Type.h"
 
-#include <map>
-#include <set>
 #include <string>
 
-class TagMask;
 class Database;
 struct DatabaseSelection;
 template<typename Key> class RecursiveMap;
 template<typename T> struct ConstBuffer;
 
+/**
+ * Walk the database and collect unique tag values.
+ */
 RecursiveMap<std::string>
 CollectUniqueTags(const Database &db, const DatabaseSelection &selection,
 		  ConstBuffer<TagType> tag_types);

@@ -33,9 +33,8 @@
 #include "PendingCall.hxx"
 #include "Message.hxx"
 
+#include <cassert>
 #include <functional>
-
-#include <assert.h>
 
 namespace ODBus {
 
@@ -49,7 +48,7 @@ namespace ODBus {
 class AsyncRequest {
 	PendingCall pending_call;
 
-	std::function<void(Message) noexcept> callback;
+	std::function<void(Message)> callback;
 
 public:
 	operator bool() const noexcept {

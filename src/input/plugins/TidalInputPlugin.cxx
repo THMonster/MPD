@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -34,8 +34,8 @@
 #include "util/StringCompare.hxx"
 #include "Log.hxx"
 
-#include <stdexcept>
 #include <memory>
+#include <utility>
 
 static constexpr Domain tidal_domain("tidal");
 
@@ -66,7 +66,7 @@ public:
 		tidal_session->AddLoginHandler(*this);
 	}
 
-	~TidalInputStream() {
+	~TidalInputStream() override {
 		tidal_session->RemoveLoginHandler(*this);
 	}
 
@@ -78,7 +78,7 @@ public:
 	}
 
 private:
-	void Failed(std::exception_ptr e) {
+	void Failed(const std::exception_ptr& e) {
 		SetInput(std::make_unique<FailingInputStream>(GetURI(), e,
 							      mutex));
 	}
@@ -134,7 +134,7 @@ static bool
 IsInvalidSession(std::exception_ptr e) noexcept
 {
 	try {
-		std::rethrow_exception(e);
+		std::rethrow_exception(std::move(e));
 	} catch (const TidalError &te) {
 		return te.IsInvalidSession();
 	} catch (...) {
@@ -189,7 +189,7 @@ InitTidalInput(EventLoop &event_loop, const ConfigBlock &block)
 }
 
 static void
-FinishTidalInput()
+FinishTidalInput() noexcept
 {
 	delete tidal_session;
 }
@@ -251,5 +251,6 @@ const InputPlugin tidal_input_plugin = {
 	InitTidalInput,
 	FinishTidalInput,
 	OpenTidalInput,
+	nullptr,
 	ScanTidalTags,
 };

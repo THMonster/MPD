@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -30,8 +30,6 @@ extern "C" {
 #include <libavutil/log.h>
 }
 
-#include <stdio.h>
-
 gcc_const
 static LogLevel
 FfmpegImportLogLevel(int level) noexcept
@@ -49,7 +47,7 @@ FfmpegImportLogLevel(int level) noexcept
 }
 
 void
-FfmpegLogCallback(gcc_unused void *ptr, int level, const char *fmt, va_list vl)
+FfmpegLogCallback(void *ptr, int level, const char *fmt, std::va_list vl)
 {
 	const AVClass * cls = nullptr;
 

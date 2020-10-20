@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,10 +18,10 @@
  */
 
 #include "Control.hxx"
+#include "Error.hxx"
 #include "Filtered.hxx"
 #include "Client.hxx"
 #include "Domain.hxx"
-#include "mixer/MixerInternal.hxx"
 #include "thread/Util.hxx"
 #include "thread/Slack.hxx"
 #include "thread/Name.hxx"
@@ -30,7 +30,8 @@
 #include "util/RuntimeError.hxx"
 #include "Log.hxx"
 
-#include <assert.h>
+#include <cassert>
+
 #include <string.h>
 
 void
@@ -39,7 +40,7 @@ AudioOutputControl::CommandFinished() noexcept
 	assert(command != Command::NONE);
 	command = Command::NONE;
 
-	client_cond.signal();
+	client_cond.notify_one();
 }
 
 inline void
@@ -135,6 +136,7 @@ AudioOutputControl::InternalOpen(const AudioFormat in_audio_format,
 
 	last_error = nullptr;
 	fail_timer.Reset();
+	caught_interrupted = false;
 	skip_delay = true;
 
 	AudioFormat f;
@@ -209,14 +211,14 @@ AudioOutputControl::InternalCheckClose(bool drain) noexcept
  * was issued
  */
 inline bool
-AudioOutputControl::WaitForDelay() noexcept
+AudioOutputControl::WaitForDelay(std::unique_lock<Mutex> &lock) noexcept
 {
 	while (true) {
 		const auto delay = output->Delay();
 		if (delay <= std::chrono::steady_clock::duration::zero())
 			return true;
 
-		(void)wake_cond.timed_wait(mutex, delay);
+		(void)wake_cond.wait_for(lock, delay);
 
 		if (command != Command::NONE)
 			return false;
@@ -235,7 +237,7 @@ try {
 }
 
 inline bool
-AudioOutputControl::PlayChunk() noexcept
+AudioOutputControl::PlayChunk(std::unique_lock<Mutex> &lock) noexcept
 {
 	// ensure pending tags are flushed in all cases
 	const auto *tag = source.ReadTag();
@@ -243,6 +245,9 @@ AudioOutputControl::PlayChunk() noexcept
 		const ScopeUnlock unlock(mutex);
 		try {
 			output->SendTag(*tag);
+		} catch (AudioOutputInterrupted) {
+			caught_interrupted = true;
+			return false;
 		} catch (...) {
 			FormatError(std::current_exception(),
 				    "Failed to send tag to %s",
@@ -257,7 +262,7 @@ AudioOutputControl::PlayChunk() noexcept
 
 		if (skip_delay)
 			skip_delay = false;
-		else if (!WaitForDelay())
+		else if (!WaitForDelay(lock))
 			break;
 
 		size_t nbytes;
@@ -267,6 +272,9 @@ AudioOutputControl::PlayChunk() noexcept
 			nbytes = output->Play(data.data, data.size);
 			assert(nbytes > 0);
 			assert(nbytes <= data.size);
+		} catch (AudioOutputInterrupted) {
+			caught_interrupted = true;
+			return false;
 		} catch (...) {
 			FormatError(std::current_exception(),
 				    "Failed to play on %s", GetLogName());
@@ -283,7 +291,7 @@ AudioOutputControl::PlayChunk() noexcept
 }
 
 inline bool
-AudioOutputControl::InternalPlay() noexcept
+AudioOutputControl::InternalPlay(std::unique_lock<Mutex> &lock) noexcept
 {
 	if (!FillSourceOrClose())
 		/* no chunk available */
@@ -312,7 +320,7 @@ AudioOutputControl::InternalPlay() noexcept
 			n = 0;
 		}
 
-		if (!PlayChunk())
+		if (!PlayChunk(lock))
 			break;
 	} while (FillSourceOrClose());
 
@@ -323,7 +331,7 @@ AudioOutputControl::InternalPlay() noexcept
 }
 
 inline void
-AudioOutputControl::InternalPause() noexcept
+AudioOutputControl::InternalPause(std::unique_lock<Mutex> &lock) noexcept
 {
 	{
 		const ScopeUnlock unlock(mutex);
@@ -335,13 +343,18 @@ AudioOutputControl::InternalPause() noexcept
 	CommandFinished();
 
 	do {
-		if (!WaitForDelay())
+		if (!WaitForDelay(lock))
 			break;
 
-		bool success;
-		{
+		bool success = false;
+		try {
 			const ScopeUnlock unlock(mutex);
 			success = output->IteratePause();
+		} catch (AudioOutputInterrupted) {
+		} catch (...) {
+			FormatError(std::current_exception(),
+				    "Failed to pause %s",
+				    GetLogName());
 		}
 
 		if (!success) {
@@ -407,17 +420,28 @@ AudioOutputControl::Task() noexcept
 	try {
 		SetThreadRealtime();
 	} catch (...) {
-		LogError(std::current_exception(),
-			 "OutputThread could not get realtime scheduling, continuing anyway");
+		Log(LogLevel::INFO, std::current_exception(),
+		    "OutputThread could not get realtime scheduling, continuing anyway");
 	}
 
-	SetThreadTimerSlackUS(100);
+	SetThreadTimerSlack(std::chrono::microseconds(100));
 
-	const std::lock_guard<Mutex> lock(mutex);
+	std::unique_lock<Mutex> lock(mutex);
 
 	while (true) {
 		switch (command) {
 		case Command::NONE:
+			/* no pending command: play (or wait for a
+			   command) */
+
+			if (open && allow_play && !caught_interrupted &&
+			    InternalPlay(lock))
+				/* don't wait for an event if there
+				   are more chunks in the pipe */
+				continue;
+
+			woken_for_play = false;
+			wake_cond.wait(lock);
 			break;
 
 		case Command::ENABLE:
@@ -449,12 +473,10 @@ AudioOutputControl::Task() noexcept
 				break;
 			}
 
-			InternalPause();
-			/* don't "break" here: this might cause
-			   Play() to be called when command==CLOSE
-			   ends the paused state - "continue" checks
-			   the new command first */
-			continue;
+			caught_interrupted = false;
+
+			InternalPause(lock);
+			break;
 
 		case Command::RELEASE:
 			if (!open) {
@@ -465,6 +487,8 @@ AudioOutputControl::Task() noexcept
 				break;
 			}
 
+			caught_interrupted = false;
+
 			if (always_on) {
 				/* in "always_on" mode, the output is
 				   paused instead of being closed;
@@ -473,26 +497,24 @@ AudioOutputControl::Task() noexcept
 				   have been invalidated by stopping
 				   the actual playback */
 				source.Cancel();
-				InternalPause();
+				InternalPause(lock);
 			} else {
 				InternalClose(false);
 				CommandFinished();
 			}
 
-			/* don't "break" here: this might cause
-			   Play() to be called when command==CLOSE
-			   ends the paused state - "continue" checks
-			   the new command first */
-			continue;
+			break;
 
 		case Command::DRAIN:
 			if (open)
 				InternalDrain();
 
 			CommandFinished();
-			continue;
+			break;
 
 		case Command::CANCEL:
+			caught_interrupted = false;
+
 			source.Cancel();
 
 			if (open) {
@@ -501,23 +523,13 @@ AudioOutputControl::Task() noexcept
 			}
 
 			CommandFinished();
-			continue;
+			break;
 
 		case Command::KILL:
 			InternalDisable();
 			source.Cancel();
 			CommandFinished();
 			return;
-		}
-
-		if (open && allow_play && InternalPlay())
-			/* don't wait for an event if there are more
-			   chunks in the pipe */
-			continue;
-
-		if (command == Command::NONE) {
-			woken_for_play = false;
-			wake_cond.wait(mutex);
 		}
 	}
 }
@@ -526,6 +538,8 @@ void
 AudioOutputControl::StartThread()
 {
 	assert(command == Command::NONE);
+
+	killed = false;
 
 	const ScopeUnlock unlock(mutex);
 	thread.Start();

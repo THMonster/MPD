@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2014 Max Kellermann <max.kellermann@gmail.com>
+ * Copyright 2011-2019 Max Kellermann <max.kellermann@gmail.com>
  * http://www.musicpd.org
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,18 +32,19 @@
 #include "CharUtil.hxx"
 
 #include <algorithm>
+#include <cstdint>
 
 /**
  * Is this a leading byte that is followed by 1 continuation byte?
  */
 static constexpr bool
-IsLeading1(unsigned char ch)
+IsLeading1(uint8_t ch) noexcept
 {
 	return (ch & 0xe0) == 0xc0;
 }
 
-static constexpr unsigned char
-MakeLeading1(unsigned char value)
+static constexpr uint8_t
+MakeLeading1(uint8_t value) noexcept
 {
 	return 0xc0 | value;
 }
@@ -52,13 +53,13 @@ MakeLeading1(unsigned char value)
  * Is this a leading byte that is followed by 2 continuation byte?
  */
 static constexpr bool
-IsLeading2(unsigned char ch)
+IsLeading2(uint8_t ch) noexcept
 {
 	return (ch & 0xf0) == 0xe0;
 }
 
-static constexpr unsigned char
-MakeLeading2(unsigned char value)
+static constexpr uint8_t
+MakeLeading2(uint8_t value) noexcept
 {
 	return 0xe0 | value;
 }
@@ -67,13 +68,13 @@ MakeLeading2(unsigned char value)
  * Is this a leading byte that is followed by 3 continuation byte?
  */
 static constexpr bool
-IsLeading3(unsigned char ch)
+IsLeading3(uint8_t ch) noexcept
 {
 	return (ch & 0xf8) == 0xf0;
 }
 
-static constexpr unsigned char
-MakeLeading3(unsigned char value)
+static constexpr uint8_t
+MakeLeading3(uint8_t value) noexcept
 {
 	return 0xf0 | value;
 }
@@ -82,13 +83,13 @@ MakeLeading3(unsigned char value)
  * Is this a leading byte that is followed by 4 continuation byte?
  */
 static constexpr bool
-IsLeading4(unsigned char ch)
+IsLeading4(uint8_t ch) noexcept
 {
 	return (ch & 0xfc) == 0xf8;
 }
 
-static constexpr unsigned char
-MakeLeading4(unsigned char value)
+static constexpr uint8_t
+MakeLeading4(uint8_t value) noexcept
 {
 	return 0xf8 | value;
 }
@@ -97,19 +98,19 @@ MakeLeading4(unsigned char value)
  * Is this a leading byte that is followed by 5 continuation byte?
  */
 static constexpr bool
-IsLeading5(unsigned char ch)
+IsLeading5(uint8_t ch) noexcept
 {
 	return (ch & 0xfe) == 0xfc;
 }
 
-static constexpr unsigned char
-MakeLeading5(unsigned char value)
+static constexpr uint8_t
+MakeLeading5(uint8_t value) noexcept
 {
 	return 0xfc | value;
 }
 
 static constexpr bool
-IsContinuation(unsigned char ch)
+IsContinuation(uint8_t ch) noexcept
 {
 	return (ch & 0xc0) == 0x80;
 }
@@ -117,8 +118,8 @@ IsContinuation(unsigned char ch)
 /**
  * Generate a continuation byte of the low 6 bit.
  */
-static constexpr unsigned char
-MakeContinuation(unsigned char value)
+static constexpr uint8_t
+MakeContinuation(uint8_t value) noexcept
 {
 	return 0x80 | (value & 0x3f);
 }
@@ -127,7 +128,7 @@ bool
 ValidateUTF8(const char *p) noexcept
 {
 	for (; *p != 0; ++p) {
-		unsigned char ch = *p;
+		uint8_t ch = *p;
 		if (IsASCII(ch))
 			continue;
 
@@ -203,7 +204,7 @@ struct CheckSequenceUTF8 {
 
 template<>
 struct CheckSequenceUTF8<0U> {
-	constexpr bool operator()(gcc_unused const char *p) const noexcept {
+	constexpr bool operator()([[maybe_unused]] const char *p) const noexcept {
 		return true;
 	}
 };
@@ -221,7 +222,7 @@ InnerSequenceLengthUTF8(const char *p) noexcept
 size_t
 SequenceLengthUTF8(const char *p) noexcept
 {
-	const unsigned char ch = *p++;
+	const uint8_t ch = *p++;
 
 	if (IsASCII(ch))
 		return 1;
@@ -272,7 +273,7 @@ Latin1ToUTF8(const char *gcc_restrict src, char *gcc_restrict buffer,
 	char *q = std::copy(src, p, buffer);
 
 	while (*p != 0) {
-		unsigned char ch = *p++;
+		uint8_t ch = *p++;
 
 		if (IsASCII(ch)) {
 			*q++ = ch;

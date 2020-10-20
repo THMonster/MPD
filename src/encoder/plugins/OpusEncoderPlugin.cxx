@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,18 +19,16 @@
 
 #include "OpusEncoderPlugin.hxx"
 #include "OggEncoder.hxx"
-#include "AudioFormat.hxx"
-#include "config/Domain.hxx"
-#include "util/Alloc.hxx"
+#include "pcm/AudioFormat.hxx"
 #include "util/ByteOrder.hxx"
 #include "util/StringUtil.hxx"
 
 #include <opus.h>
 #include <ogg/ogg.h>
 
+#include <cassert>
 #include <stdexcept>
 
-#include <assert.h>
 #include <stdlib.h>
 
 namespace {
@@ -56,7 +54,7 @@ class OpusEncoder final : public OggEncoder {
 
 public:
 	OpusEncoder(AudioFormat &_audio_format, ::OpusEncoder *_enc, bool _chaining);
-	~OpusEncoder() override;
+	~OpusEncoder() noexcept override;
 
 	/* virtual methods from class Encoder */
 	void End() override;
@@ -69,9 +67,9 @@ private:
 	void DoEncode(bool eos);
 	void WriteSilence(unsigned fill_frames);
 
-	void GenerateHeaders(const Tag *tag);
-	void GenerateHead();
-	void GenerateTags(const Tag *tag);
+	void GenerateHeaders(const Tag *tag) noexcept;
+	void GenerateHead() noexcept;
+	void GenerateTags(const Tag *tag) noexcept;
 };
 
 class PreparedOpusEncoder final : public PreparedEncoder {
@@ -81,12 +79,12 @@ class PreparedOpusEncoder final : public PreparedEncoder {
 	const bool chaining;
 
 public:
-	PreparedOpusEncoder(const ConfigBlock &block);
+	explicit PreparedOpusEncoder(const ConfigBlock &block);
 
 	/* virtual methods from class PreparedEncoder */
 	Encoder *Open(AudioFormat &audio_format) override;
 
-	const char *GetMimeType() const override {
+	[[nodiscard]] const char *GetMimeType() const noexcept override {
 		return "audio/ogg";
 	}
 };
@@ -122,7 +120,7 @@ PreparedOpusEncoder::PreparedOpusEncoder(const ConfigBlock &block)
 		throw std::runtime_error("Invalid signal");
 }
 
-static PreparedEncoder *
+PreparedEncoder *
 opus_encoder_init(const ConfigBlock &block)
 {
 	return new PreparedOpusEncoder(block);
@@ -134,7 +132,7 @@ OpusEncoder::OpusEncoder(AudioFormat &_audio_format, ::OpusEncoder *_enc, bool _
 	 frame_size(_audio_format.GetFrameSize()),
 	 buffer_frames(_audio_format.sample_rate / 50),
 	 buffer_size(frame_size * buffer_frames),
-	 buffer((unsigned char *)xalloc(buffer_size)),
+	 buffer(new uint8_t[buffer_size]),
 	 enc(_enc)
 {
 	opus_encoder_ctl(enc, OPUS_GET_LOOKAHEAD(&lookahead));
@@ -179,9 +177,9 @@ PreparedOpusEncoder::Open(AudioFormat &audio_format)
 	return new OpusEncoder(audio_format, enc, chaining);
 }
 
-OpusEncoder::~OpusEncoder()
+OpusEncoder::~OpusEncoder() noexcept
 {
-	free(buffer);
+	delete[] buffer;
 	opus_encoder_destroy(enc);
 }
 
@@ -250,7 +248,7 @@ OpusEncoder::WriteSilence(unsigned fill_frames)
 void
 OpusEncoder::Write(const void *_data, size_t length)
 {
-	const uint8_t *data = (const uint8_t *)_data;
+	const auto *data = (const uint8_t *)_data;
 
 	if (lookahead > 0) {
 		/* generate some silence at the beginning of the
@@ -278,14 +276,14 @@ OpusEncoder::Write(const void *_data, size_t length)
 }
 
 void
-OpusEncoder::GenerateHeaders(const Tag *tag)
+OpusEncoder::GenerateHeaders(const Tag *tag) noexcept
 {
 	GenerateHead();
 	GenerateTags(tag);
 }
 
 void
-OpusEncoder::GenerateHead()
+OpusEncoder::GenerateHead() noexcept
 {
 	unsigned char header[19];
 	memcpy(header, "OpusHead", 8);
@@ -309,7 +307,7 @@ OpusEncoder::GenerateHead()
 }
 
 void
-OpusEncoder::GenerateTags(const Tag *tag)
+OpusEncoder::GenerateTags(const Tag *tag) noexcept
 {
 	const char *version = opus_get_version_string();
 	size_t version_length = strlen(version);
@@ -325,7 +323,7 @@ OpusEncoder::GenerateTags(const Tag *tag)
 		}
 	}
 
-	unsigned char *comments = (unsigned char *)xalloc(comments_size);
+	auto *comments = new unsigned char[comments_size];
 	unsigned char *p = comments;
 
 	memcpy(comments, "OpusTags", 8);
@@ -369,7 +367,7 @@ OpusEncoder::GenerateTags(const Tag *tag)
 	stream.PacketIn(packet);
 	Flush();
 
-	free(comments);
+	delete[] comments;
 }
 
 void
@@ -389,7 +387,7 @@ OpusEncoder::SendTag(const Tag &tag)
 	GenerateHeaders(&tag);
 }
 
-}
+} // namespace
 
 const EncoderPlugin opus_encoder_plugin = {
 	"opus",

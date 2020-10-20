@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,7 +21,7 @@
 #include "input/InputStream.hxx"
 #include "Log.hxx"
 
-#include <assert.h>
+#include <cassert>
 
 size_t
 decoder_read(DecoderClient *client,
@@ -46,7 +46,7 @@ size_t
 decoder_read_much(DecoderClient *client, InputStream &is,
 		  void *_buffer, size_t size) noexcept
 {
-	uint8_t *buffer = (uint8_t *)_buffer;
+	auto buffer = (uint8_t *)_buffer;
 
 	size_t total = 0;
 
@@ -67,7 +67,7 @@ bool
 decoder_read_full(DecoderClient *client, InputStream &is,
 		  void *_buffer, size_t size) noexcept
 {
-	uint8_t *buffer = (uint8_t *)_buffer;
+	auto buffer = (uint8_t *)_buffer;
 
 	while (size > 0) {
 		size_t nbytes = decoder_read(client, is, buffer, size);

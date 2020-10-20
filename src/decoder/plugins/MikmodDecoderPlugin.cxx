@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,11 +24,13 @@
 #include "fs/Path.hxx"
 #include "util/Domain.hxx"
 #include "util/RuntimeError.hxx"
+#include "util/StringView.hxx"
 #include "Log.hxx"
+#include "Version.h"
 
 #include <mikmod.h>
 
-#include <assert.h>
+#include <cassert>
 
 static constexpr Domain mikmod_domain("mikmod");
 
@@ -37,24 +39,24 @@ static constexpr Domain mikmod_domain("mikmod");
 static constexpr size_t MIKMOD_FRAME_SIZE = 4096;
 
 static BOOL
-mikmod_mpd_init(void)
+mikmod_mpd_init()
 {
 	return VC_Init();
 }
 
 static void
-mikmod_mpd_exit(void)
+mikmod_mpd_exit()
 {
 	VC_Exit();
 }
 
 static void
-mikmod_mpd_update(void)
+mikmod_mpd_update()
 {
 }
 
 static BOOL
-mikmod_mpd_is_present(void)
+mikmod_mpd_is_present()
 {
 	return true;
 }
@@ -222,15 +224,8 @@ static const char *const mikmod_decoder_suffixes[] = {
 	nullptr
 };
 
-const struct DecoderPlugin mikmod_decoder_plugin = {
-	"mikmod",
-	mikmod_decoder_init,
-	mikmod_decoder_finish,
-	nullptr,
-	mikmod_decoder_file_decode,
-	mikmod_decoder_scan_file,
-	nullptr,
-	nullptr,
-	mikmod_decoder_suffixes,
-	nullptr,
-};
+constexpr DecoderPlugin mikmod_decoder_plugin =
+	DecoderPlugin("mikmod",
+		      mikmod_decoder_file_decode, mikmod_decoder_scan_file)
+	.WithInit(mikmod_decoder_init, mikmod_decoder_finish)
+	.WithSuffixes(mikmod_decoder_suffixes);

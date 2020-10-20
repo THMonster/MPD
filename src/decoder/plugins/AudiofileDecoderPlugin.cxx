@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,7 +20,7 @@
 #include "AudiofileDecoderPlugin.hxx"
 #include "../DecoderAPI.hxx"
 #include "input/InputStream.hxx"
-#include "CheckAudioFormat.hxx"
+#include "pcm/CheckAudioFormat.hxx"
 #include "tag/Handler.hxx"
 #include "util/ScopeExit.hxx"
 #include "util/Domain.hxx"
@@ -29,9 +29,9 @@
 #include <audiofile.h>
 #include <af_vfs.h>
 
+#include <cassert>
 #include <exception>
 
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -129,7 +129,7 @@ audiofile_file_seek(AFvirtualfile *vfile, AFfileoffset _offset,
 static AFvirtualfile *
 setup_virtual_fops(AudioFileInputStream &afis) noexcept
 {
-	AFvirtualfile *vf = (AFvirtualfile *)malloc(sizeof(*vf));
+	auto vf = (AFvirtualfile *)malloc(sizeof(AFvirtualfile));
 	vf->closure = &afis;
 	vf->write = nullptr;
 	vf->read    = audiofile_file_read;
@@ -200,7 +200,7 @@ audiofile_stream_decode(DecoderClient &client, InputStream &is)
 	AudioFileInputStream afis{&client, is};
 	AFvirtualfile *const vf = setup_virtual_fops(afis);
 
-	const AFfilehandle fh = afOpenVirtualFile(vf, "r", nullptr);
+	auto fh = afOpenVirtualFile(vf, "r", nullptr);
 	if (fh == AF_NULL_FILEHANDLE)
 		return;
 
@@ -209,10 +209,10 @@ audiofile_stream_decode(DecoderClient &client, InputStream &is)
 	const auto audio_format = CheckAudioFormat(fh);
 	const auto total_time = audiofile_get_duration(fh);
 
-	const uint16_t kbit_rate = (uint16_t)
+	const auto kbit_rate = (uint16_t)
 		(is.GetSize() * uint64_t(8) / total_time.ToMS());
 
-	const unsigned frame_size = (unsigned)
+	const auto frame_size = (unsigned)
 		afGetVirtualFrameSize(fh, AF_DEFAULT_TRACK, true);
 
 	client.Ready(audio_format, true, total_time);
@@ -276,15 +276,9 @@ static const char *const audiofile_mime_types[] = {
 	nullptr
 };
 
-const struct DecoderPlugin audiofile_decoder_plugin = {
-	"audiofile",
-	audiofile_init,
-	nullptr,
-	audiofile_stream_decode,
-	nullptr,
-	nullptr,
-	audiofile_scan_stream,
-	nullptr,
-	audiofile_suffixes,
-	audiofile_mime_types,
-};
+constexpr DecoderPlugin audiofile_decoder_plugin =
+	DecoderPlugin("audiofile",
+		      audiofile_stream_decode, audiofile_scan_stream)
+	.WithInit(audiofile_init)
+	.WithSuffixes(audiofile_suffixes)
+	.WithMimeTypes(audiofile_mime_types);

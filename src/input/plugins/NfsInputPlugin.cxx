@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -22,7 +22,6 @@
 #include "../InputPlugin.hxx"
 #include "lib/nfs/Glue.hxx"
 #include "lib/nfs/FileReader.hxx"
-#include "util/ASCII.hxx"
 
 /**
  * Do not buffer more than this number of bytes.  It should be a
@@ -48,7 +47,7 @@ public:
 				  NFS_MAX_BUFFERED,
 				  NFS_RESUME_AT) {}
 
-	virtual ~NfsInputStream() {
+	~NfsInputStream() override {
 		DeferClose();
 	}
 
@@ -63,8 +62,8 @@ private:
 
 protected:
 	/* virtual methods from AsyncInputStream */
-	virtual void DoResume() override;
-	virtual void DoSeek(offset_type new_offset) override;
+	void DoResume() override;
+	void DoSeek(offset_type new_offset) override;
 
 private:
 	/* virtual methods from NfsFileReader */
@@ -232,4 +231,5 @@ const InputPlugin input_plugin_nfs = {
 	input_nfs_init,
 	input_nfs_finish,
 	input_nfs_open,
+	nullptr
 };

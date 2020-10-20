@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,7 +20,7 @@
 #include "GmeDecoderPlugin.hxx"
 #include "../DecoderAPI.hxx"
 #include "config/Block.hxx"
-#include "CheckAudioFormat.hxx"
+#include "pcm/CheckAudioFormat.hxx"
 #include "song/DetachedSong.hxx"
 #include "tag/Handler.hxx"
 #include "tag/Builder.hxx"
@@ -31,12 +31,14 @@
 #include "util/ScopeExit.hxx"
 #include "util/StringCompare.hxx"
 #include "util/StringFormat.hxx"
+#include "util/StringView.hxx"
 #include "util/Domain.hxx"
 #include "Log.hxx"
 
 #include <gme/gme.h>
 
-#include <assert.h>
+#include <cassert>
+
 #include <stdlib.h>
 
 #define SUBTUNE_PREFIX "tune_"
@@ -57,9 +59,10 @@ struct GmeContainerPath {
 #if GME_VERSION >= 0x000600
 static int gme_accuracy;
 #endif
+static unsigned gme_default_fade;
 
 static bool
-gme_plugin_init(gcc_unused const ConfigBlock &block)
+gme_plugin_init([[maybe_unused]] const ConfigBlock &block)
 {
 #if GME_VERSION >= 0x000600
 	auto accuracy = block.GetBlockParam("accuracy");
@@ -67,6 +70,10 @@ gme_plugin_init(gcc_unused const ConfigBlock &block)
 		? (int)accuracy->GetBoolValue()
 		: -1;
 #endif
+	auto fade = block.GetBlockParam("default_fade");
+	gme_default_fade = fade != nullptr
+		? fade->GetUnsignedValue() * 1000
+		: 8000;
 
 	return true;
 }
@@ -105,7 +112,7 @@ ParseContainerPath(Path path_fs)
 
 static AllocatedPath
 ReplaceSuffix(Path src,
-	      const PathTraitsFS::const_pointer_type new_suffix) noexcept
+	      const PathTraitsFS::const_pointer new_suffix) noexcept
 {
 	const auto *old_suffix = src.GetSuffix();
 	if (old_suffix == nullptr)
@@ -117,7 +124,7 @@ ReplaceSuffix(Path src,
 }
 
 static Music_Emu*
-LoadGmeAndM3u(GmeContainerPath container) {
+LoadGmeAndM3u(const GmeContainerPath& container) {
 
 	Music_Emu *emu;
 	const char *gme_err =
@@ -169,10 +176,16 @@ gme_file_decode(DecoderClient &client, Path path_fs)
 	}
 
 	const int length = ti->play_length;
+#if GME_VERSION >= 0x000700
+	const int fade   = ti->fade_length;
+#else
+	const int fade   = -1;
+#endif
 	gme_free_info(ti);
 
 	const SignedSongTime song_len = length > 0
-		? SignedSongTime::FromMS(length)
+		? SignedSongTime::FromMS(length +
+			(fade == -1 ? gme_default_fade : fade))
 		: SignedSongTime::Negative();
 
 	/* initialize the MPD decoder */
@@ -187,10 +200,10 @@ gme_file_decode(DecoderClient &client, Path path_fs)
 	if (gme_err != nullptr)
 		LogWarning(gme_domain, gme_err);
 
-	if (length > 0)
+	if (length > 0 && fade != 0)
 		gme_set_fade(emu, length
 #if GME_VERSION >= 0x000700
-			     , 8000
+			     , fade == -1 ? gme_default_fade : fade
 #endif
 			     );
 
@@ -225,10 +238,14 @@ ScanGmeInfo(const gme_info_t &info, unsigned song_num, int track_count,
 	    TagHandler &handler) noexcept
 {
 	if (info.play_length > 0)
-		handler.OnDuration(SongTime::FromMS(info.play_length));
+		handler.OnDuration(SongTime::FromMS(info.play_length
+#if GME_VERSION >= 0x000700
+			+ (info.fade_length == -1 ? gme_default_fade : info.fade_length)
+#endif
+			));
 
 	if (track_count > 1)
-		handler.OnTag(TAG_TRACK, StringFormat<16>("%u", song_num + 1));
+		handler.OnTag(TAG_TRACK, StringFormat<16>("%u", song_num + 1).c_str());
 
 	if (!StringIsEmpty(info.song)) {
 		if (track_count > 1) {
@@ -237,7 +254,7 @@ ScanGmeInfo(const gme_info_t &info, unsigned song_num, int track_count,
 				StringFormat<1024>("%s (%u/%d)",
 						   info.song, song_num + 1,
 						   track_count);
-			handler.OnTag(TAG_TITLE, tag_title);
+			handler.OnTag(TAG_TITLE, tag_title.c_str());
 		} else
 			handler.OnTag(TAG_TITLE, info.song);
 	}
@@ -331,15 +348,8 @@ static const char *const gme_suffixes[] = {
 	nullptr
 };
 
-const struct DecoderPlugin gme_decoder_plugin = {
-	"gme",
-	gme_plugin_init,
-	nullptr,
-	nullptr,
-	gme_file_decode,
-	gme_scan_file,
-	nullptr,
-	gme_container_scan,
-	gme_suffixes,
-	nullptr,
-};
+constexpr DecoderPlugin gme_decoder_plugin =
+	DecoderPlugin("gme", gme_file_decode, gme_scan_file)
+	.WithInit(gme_plugin_init)
+	.WithContainer(gme_container_scan)
+	.WithSuffixes(gme_suffixes);

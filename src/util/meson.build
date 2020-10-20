@@ -5,8 +5,8 @@ util = static_library(
   'UTF8.cxx',
   'HexFormat.cxx',
   'MimeType.cxx',
+  'NumberParser.cxx',
   'StringView.cxx',
-  'AllocatedString.cxx',
   'TruncateString.cxx',
   'StringStrip.cxx',
   'StringUtil.cxx',
@@ -16,6 +16,9 @@ util = static_library(
   'SplitString.cxx',
   'FormatString.cxx',
   'Tokenizer.cxx',
+  'UriExtract.cxx',
+  'UriQueryParser.cxx',
+  'UriRelative.cxx',
   'UriUtil.cxx',
   'LazyRandomEngine.cxx',
   'HugeAllocator.cxx',
@@ -25,7 +28,7 @@ util = static_library(
   'OptionParser.cxx',
   'ByteReverse.cxx',
   'format.c',
-  'bit_reverse.c',
+  'BitReverse.cxx',
   include_directories: inc,
 )
 

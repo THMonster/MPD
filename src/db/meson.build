@@ -27,8 +27,10 @@ db_glue_sources = [
   'update/Walk.cxx',
   'update/UpdateSong.cxx',
   'update/Container.cxx',
+  'update/Playlist.cxx',
   'update/Remove.cxx',
   'update/ExcludeList.cxx',
+  'update/VirtualDirectory.cxx',
   'DatabaseGlue.cxx',
   'Configured.cxx',
   'DatabaseSong.cxx',
@@ -52,6 +54,7 @@ db_glue = static_library(
   include_directories: inc,
   dependencies: [
     boost_dep,
+    log_dep,
   ],
 )
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -25,7 +25,6 @@
 #include "util/ASCII.hxx"
 #include "util/StringView.hxx"
 #include "lib/expat/ExpatParser.hxx"
-#include "Log.hxx"
 
 /**
  * This is the state object for our XML parser.
@@ -43,7 +42,7 @@ struct AsxParser {
 	enum {
 		ROOT, ENTRY,
 		TAG,
-	} state;
+	} state{ROOT};
 
 	/**
 	 * The current tag within the "entry" element.  This is only
@@ -60,10 +59,6 @@ struct AsxParser {
 	TagBuilder tag_builder;
 
 	std::string value;
-
-	AsxParser()
-		:state(ROOT) {}
-
 };
 
 static constexpr struct tag_table asx_tag_elements[] = {
@@ -78,7 +73,7 @@ static void XMLCALL
 asx_start_element(void *user_data, const XML_Char *element_name,
 		  const XML_Char **atts)
 {
-	AsxParser *parser = (AsxParser *)user_data;
+	auto *parser = (AsxParser *)user_data;
 	parser->value.clear();
 
 	switch (parser->state) {
@@ -113,7 +108,7 @@ asx_start_element(void *user_data, const XML_Char *element_name,
 static void XMLCALL
 asx_end_element(void *user_data, const XML_Char *element_name)
 {
-	AsxParser *parser = (AsxParser *)user_data;
+	auto *parser = (AsxParser *)user_data;
 
 	switch (parser->state) {
 	case AsxParser::ROOT:
@@ -145,7 +140,7 @@ asx_end_element(void *user_data, const XML_Char *element_name)
 static void XMLCALL
 asx_char_data(void *user_data, const XML_Char *s, int len)
 {
-	AsxParser *parser = (AsxParser *)user_data;
+	auto *parser = (AsxParser *)user_data;
 
 	switch (parser->state) {
 	case AsxParser::ROOT:
@@ -189,15 +184,7 @@ static const char *const asx_mime_types[] = {
 	nullptr
 };
 
-const struct playlist_plugin asx_playlist_plugin = {
-	"asx",
-
-	nullptr,
-	nullptr,
-	nullptr,
-	asx_open_stream,
-
-	nullptr,
-	asx_suffixes,
-	asx_mime_types,
-};
+const PlaylistPlugin asx_playlist_plugin =
+	PlaylistPlugin("asx", asx_open_stream)
+	.WithSuffixes(asx_suffixes)
+	.WithMimeTypes(asx_mime_types);

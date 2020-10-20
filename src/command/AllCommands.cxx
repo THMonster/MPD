@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -33,22 +33,24 @@
 #include "NeighborCommands.hxx"
 #include "ClientCommands.hxx"
 #include "PartitionCommands.hxx"
+#include "FingerprintCommands.hxx"
 #include "OtherCommands.hxx"
 #include "Permission.hxx"
 #include "tag/Type.h"
 #include "Partition.hxx"
+#include "Instance.hxx"
 #include "client/Client.hxx"
 #include "client/Response.hxx"
-#include "util/Macros.hxx"
 #include "util/Tokenizer.hxx"
 #include "util/StringAPI.hxx"
 
 #ifdef ENABLE_SQLITE
 #include "StickerCommands.hxx"
-#include "sticker/StickerDatabase.hxx"
 #endif
 
-#include <assert.h>
+#include <cassert>
+#include <iterator>
+
 #include <string.h>
 
 /*
@@ -101,11 +103,15 @@ static constexpr struct command commands[] = {
 	{ "decoders", PERMISSION_READ, 0, 0, handle_decoders },
 	{ "delete", PERMISSION_CONTROL, 1, 1, handle_delete },
 	{ "deleteid", PERMISSION_CONTROL, 1, 1, handle_deleteid },
+	{ "delpartition", PERMISSION_ADMIN, 1, 1, handle_delpartition },
 	{ "disableoutput", PERMISSION_ADMIN, 1, 1, handle_disableoutput },
 	{ "enableoutput", PERMISSION_ADMIN, 1, 1, handle_enableoutput },
 #ifdef ENABLE_DATABASE
 	{ "find", PERMISSION_READ, 1, -1, handle_find },
 	{ "findadd", PERMISSION_ADD, 1, -1, handle_findadd},
+#endif
+#ifdef ENABLE_CHROMAPRINT
+	{ "getfingerprint", PERMISSION_READ, 1, 1, handle_getfingerprint },
 #endif
 	{ "idle", PERMISSION_READ, 0, -1, handle_idle },
 	{ "kill", PERMISSION_ADMIN, -1, -1, handle_kill },
@@ -134,6 +140,7 @@ static constexpr struct command commands[] = {
 #endif
 	{ "move", PERMISSION_CONTROL, 2, 2, handle_move },
 	{ "moveid", PERMISSION_CONTROL, 2, 2, handle_moveid },
+	{ "moveoutput", PERMISSION_ADMIN, 1, 1, handle_moveoutput },
 	{ "newpartition", PERMISSION_ADMIN, 1, 1, handle_newpartition },
 	{ "next", PERMISSION_CONTROL, 0, 0, handle_next },
 	{ "notcommands", PERMISSION_NONE, 0, 0, handle_not_commands },
@@ -163,6 +170,7 @@ static constexpr struct command commands[] = {
 	{ "rangeid", PERMISSION_ADD, 2, 2, handle_rangeid },
 	{ "readcomments", PERMISSION_READ, 1, 1, handle_read_comments },
 	{ "readmessages", PERMISSION_READ, 0, 0, handle_read_messages },
+	{ "readpicture", PERMISSION_READ, 2, 2, handle_read_picture },
 	{ "rename", PERMISSION_CONTROL, 2, 2, handle_rename },
 	{ "repeat", PERMISSION_CONTROL, 1, 1, handle_repeat },
 	{ "replay_gain_mode", PERMISSION_CONTROL, 1, 1,
@@ -204,16 +212,16 @@ static constexpr struct command commands[] = {
 	{ "volume", PERMISSION_CONTROL, 1, 1, handle_volume },
 };
 
-static constexpr unsigned num_commands = ARRAY_SIZE(commands);
+static constexpr unsigned num_commands = std::size(commands);
 
 gcc_pure
 static bool
-command_available(gcc_unused const Partition &partition,
-		  gcc_unused const struct command *cmd) noexcept
+command_available([[maybe_unused]] const Partition &partition,
+		  [[maybe_unused]] const struct command *cmd) noexcept
 {
 #ifdef ENABLE_SQLITE
 	if (StringIsEqual(cmd->cmd, "sticker"))
-		return sticker_enabled();
+		return partition.instance.HasStickerDatabase();
 #endif
 
 #ifdef ENABLE_NEIGHBOR_PLUGINS
@@ -238,8 +246,8 @@ static CommandResult
 PrintAvailableCommands(Response &r, const Partition &partition,
 		     unsigned permission) noexcept
 {
-	for (unsigned i = 0; i < num_commands; ++i) {
-		const struct command *cmd = &commands[i];
+	for (const auto & i : commands) {
+		const struct command *cmd = &i;
 
 		if (cmd->permission == (permission & cmd->permission) &&
 		    command_available(partition, cmd))
@@ -252,8 +260,8 @@ PrintAvailableCommands(Response &r, const Partition &partition,
 static CommandResult
 PrintUnavailableCommands(Response &r, unsigned permission) noexcept
 {
-	for (unsigned i = 0; i < num_commands; ++i) {
-		const struct command *cmd = &commands[i];
+	for (const auto & i : commands) {
+		const struct command *cmd = &i;
 
 		if (cmd->permission != (permission & cmd->permission))
 			r.Format("command: %s\n", cmd->cmd);
@@ -264,14 +272,14 @@ PrintUnavailableCommands(Response &r, unsigned permission) noexcept
 
 /* don't be fooled, this is the command handler for "commands" command */
 static CommandResult
-handle_commands(Client &client, gcc_unused Request request, Response &r)
+handle_commands(Client &client, [[maybe_unused]] Request request, Response &r)
 {
 	return PrintAvailableCommands(r, client.GetPartition(),
 				      client.GetPermission());
 }
 
 static CommandResult
-handle_not_commands(Client &client, gcc_unused Request request, Response &r)
+handle_not_commands(Client &client, [[maybe_unused]] Request request, Response &r)
 {
 	return PrintUnavailableCommands(r, client.GetPermission());
 }

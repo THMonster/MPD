@@ -34,9 +34,8 @@
 #include "ConstBuffer.hxx"
 #include "WritableBuffer.hxx"
 
+#include <cassert>
 #include <map>
-
-#include <assert.h>
 
 /**
  * Helper class for #SparseBuffer which describes which portions of
@@ -90,8 +89,6 @@ private:
 	Iterator CheckCollapseNext(Iterator i) noexcept;
 };
 
-#endif
-
 /**
  * A buffer which caches the contents of a "huge" array, and remembers
  * which chunks are available.
@@ -106,7 +103,7 @@ class SparseBuffer {
 	SparseMap map;
 
 public:
-	explicit SparseBuffer(size_type size) noexcept
+	explicit SparseBuffer(size_type size)
 		:buffer(size), map(size) {
 		buffer.ForkCow(false);
 	}
@@ -139,3 +136,5 @@ public:
 		map.Commit(start_offset, end_offset);
 	}
 };
+
+#endif

@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,7 +19,7 @@
 
 #include "Mpg123DecoderPlugin.hxx"
 #include "../DecoderAPI.hxx"
-#include "CheckAudioFormat.hxx"
+#include "pcm/CheckAudioFormat.hxx"
 #include "tag/Handler.hxx"
 #include "tag/Builder.hxx"
 #include "tag/ReplayGain.hxx"
@@ -37,7 +37,7 @@
 static constexpr Domain mpg123_domain("mpg123");
 
 static bool
-mpd_mpg123_init(gcc_unused const ConfigBlock &block)
+mpd_mpg123_init([[maybe_unused]] const ConfigBlock &block)
 {
 	mpg123_init();
 
@@ -316,16 +316,7 @@ static const char *const mpg123_suffixes[] = {
 	nullptr
 };
 
-const struct DecoderPlugin mpg123_decoder_plugin = {
-	"mpg123",
-	mpd_mpg123_init,
-	mpd_mpg123_finish,
-	/* streaming not yet implemented */
-	nullptr,
-	mpd_mpg123_file_decode,
-	mpd_mpg123_scan_file,
-	nullptr,
-	nullptr,
-	mpg123_suffixes,
-	nullptr,
-};
+constexpr DecoderPlugin mpg123_decoder_plugin =
+	DecoderPlugin("mpg123", mpd_mpg123_file_decode, mpd_mpg123_scan_file)
+	.WithInit(mpd_mpg123_init, mpd_mpg123_finish)
+	.WithSuffixes(mpg123_suffixes);

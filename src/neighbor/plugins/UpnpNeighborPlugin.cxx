@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -27,8 +27,6 @@
 #include "neighbor/Info.hxx"
 #include "Log.hxx"
 
-#include <stdexcept>
-
 class UpnpNeighborExplorer final
 	: public NeighborExplorer, UPnPDiscoveryListener {
 	struct Server {
@@ -46,7 +44,7 @@ class UpnpNeighborExplorer final
 			return name == other.name;
 		}
 
-		gcc_pure
+		[[nodiscard]] gcc_pure
 		NeighborInfo Export() const noexcept {
 			return { "smb://" + name + "/", comment };
 		}
@@ -64,7 +62,7 @@ public:
 	/* virtual methods from class NeighborExplorer */
 	void Open() override;
 	void Close() noexcept override;
-	List GetList() const noexcept override;
+	[[nodiscard]] List GetList() const noexcept override;
 
 private:
 	/* virtual methods from class UPnPDiscoveryListener */
@@ -129,7 +127,7 @@ UpnpNeighborExplorer::LostUPnP(const ContentDirectoryService &service)
 static std::unique_ptr<NeighborExplorer>
 upnp_neighbor_create(EventLoop &event_loop,
 		     NeighborListener &listener,
-		     gcc_unused const ConfigBlock &block)
+		     [[maybe_unused]] const ConfigBlock &block)
 {
 	return std::make_unique<UpnpNeighborExplorer>(event_loop, listener);
 }

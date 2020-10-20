@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,10 +21,11 @@
 #include "UniqueIxml.hxx"
 #include "Device.hxx"
 #include "ixmlwrap.hxx"
-#include "Action.hxx"
-#include "util/UriUtil.hxx"
+#include "util/UriRelative.hxx"
 #include "util/RuntimeError.hxx"
-#include "util/SplitString.hxx"
+#include "util/IterableSplitString.hxx"
+
+#include <upnptools.h>
 
 ContentDirectoryService::ContentDirectoryService(const UPnPDevice &device,
 						 const UPnPService &service) noexcept
@@ -36,17 +37,15 @@ ContentDirectoryService::ContentDirectoryService(const UPnPDevice &device,
 	 m_modelName(device.modelName),
 	 m_rdreqcnt(200)
 {
-	if (!m_modelName.compare("MediaTomb")) {
+	if (m_modelName == "MediaTomb") {
 		// Readdir by 200 entries is good for most, but MediaTomb likes
 		// them really big. Actually 1000 is better but I don't dare
 		m_rdreqcnt = 500;
 	}
 }
 
-ContentDirectoryService::~ContentDirectoryService() noexcept
-{
-	/* this destructor exists here just so it won't get inlined */
-}
+/* this destructor exists here just so it won't get inlined */
+ContentDirectoryService::~ContentDirectoryService() noexcept = default;
 
 std::forward_list<std::string>
 ContentDirectoryService::getSearchCapabilities(UpnpClient_Handle hdl) const
@@ -70,9 +69,10 @@ ContentDirectoryService::getSearchCapabilities(UpnpClient_Handle hdl) const
 	const char *s = ixmlwrap::getFirstElementValue(response.get(),
 						       "SearchCaps");
 	if (s == nullptr || *s == 0)
-		/* we could just "return {}" here, but GCC 5 doesn't
-		   understand that */
-		return std::forward_list<std::string>();
+		return {};
 
-	return SplitString(s, ',', false);
+	std::forward_list<std::string> result;
+	for (const auto &i : IterableSplitString(s, ','))
+		result.emplace_front(i);
+	return result;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -25,9 +25,10 @@
 #include "util/WritableBuffer.hxx"
 #include "util/StringView.hxx"
 
+#include <algorithm>
 #include <array>
+#include <cassert>
 
-#include <assert.h>
 #include <stdlib.h>
 
 TagBuilder::TagBuilder(const Tag &other) noexcept
@@ -153,11 +154,7 @@ TagBuilder::CommitNew() noexcept
 bool
 TagBuilder::HasType(TagType type) const noexcept
 {
-	for (auto i : items)
-		if (i->type == type)
-			return true;
-
-	return false;
+	return std::any_of(items.begin(), items.end(), [type](const auto &i) { return i->type == type; });
 }
 
 void

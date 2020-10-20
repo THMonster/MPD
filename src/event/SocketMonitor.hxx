@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,10 +23,9 @@
 #include "PollGroup.hxx"
 #include "net/SocketDescriptor.hxx"
 
+#include <cassert>
+#include <cstddef>
 #include <type_traits>
-
-#include <assert.h>
-#include <stddef.h>
 
 class EventLoop;
 
@@ -57,6 +56,12 @@ public:
 	static constexpr unsigned WRITE = PollGroup::WRITE;
 	static constexpr unsigned ERROR = PollGroup::ERROR;
 	static constexpr unsigned HANGUP = PollGroup::HANGUP;
+
+	/**
+	 * These flags are always reported by epoll_wait() and don't
+	 * need to be registered with epoll_ctl().
+	 */
+	static constexpr unsigned IMPLICIT_FLAGS = ERROR|HANGUP;
 
 	typedef std::make_signed<size_t>::type ssize_t;
 

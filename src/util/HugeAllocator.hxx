@@ -31,11 +31,9 @@
 #define HUGE_ALLOCATOR_HXX
 
 #include "WritableBuffer.hxx"
-#include "Compiler.h"
 
+#include <cstddef>
 #include <utility>
-
-#include <stddef.h>
 
 #ifdef __linux__
 
@@ -85,7 +83,7 @@ WritableBuffer<void>
 HugeAllocate(size_t size);
 
 static inline void
-HugeFree(void *p, gcc_unused size_t size) noexcept
+HugeFree(void *p, size_t) noexcept
 {
 	VirtualFree(p, 0, MEM_RELEASE);
 }
@@ -105,7 +103,7 @@ HugeDiscard(void *p, size_t size) noexcept
 
 /* not Linux: fall back to standard C calls */
 
-#include <stdint.h>
+#include <cstdint>
 
 static inline WritableBuffer<void>
 HugeAllocate(size_t size)
@@ -143,8 +141,8 @@ class HugeArray {
 public:
 	typedef typename Buffer::size_type size_type;
 	typedef typename Buffer::value_type value_type;
-	typedef typename Buffer::reference_type reference;
-	typedef typename Buffer::const_reference_type const_reference;
+	typedef typename Buffer::reference reference;
+	typedef typename Buffer::const_reference const_reference;
 	typedef typename Buffer::iterator iterator;
 	typedef typename Buffer::const_iterator const_iterator;
 

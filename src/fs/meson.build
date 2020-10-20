@@ -11,6 +11,7 @@ fs_sources = [
   'List.cxx',
   'StandardDirectory.cxx',
   'CheckFile.cxx',
+  'LookupFile.cxx',
   'DirectoryReader.cxx',
   'io/PeekReader.cxx',
   'io/FileReader.cxx',
@@ -40,12 +41,14 @@ fs = static_library(
   include_directories: inc,
   dependencies: [
     zlib_dep,
+    log_dep,
   ],
 )
 
 fs_dep = declare_dependency(
   link_with: fs,
   dependencies: [
+    io_dep,
     system_dep,
     icu_dep,
     shlwapi_dep,

@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -26,12 +26,12 @@
 #include "fs/NarrowPath.hxx"
 #include "fs/io/StdioOutputStream.hxx"
 #include "fs/io/BufferedOutputStream.hxx"
-#include "util/UriUtil.hxx"
 #include "util/PrintException.hxx"
+#include "util/UriExtract.hxx"
 
+#include <cassert>
 #include <stdexcept>
 
-#include <assert.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>

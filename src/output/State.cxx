@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,7 +24,6 @@
 
 #include "State.hxx"
 #include "MultipleOutputs.hxx"
-#include "Filtered.hxx"
 #include "Domain.hxx"
 #include "Log.hxx"
 #include "fs/io/BufferedOutputStream.hxx"
@@ -81,7 +80,7 @@ audio_output_state_read(const char *line, MultipleOutputs &outputs)
 }
 
 unsigned
-audio_output_state_get_version(void)
+audio_output_state_get_version()
 {
 	return audio_output_state_version;
 }

@@ -1,12 +1,18 @@
 project(
   'mpd',
   ['c', 'cpp'],
-  version: '0.21.26',
+  version: '0.22.1',
   meson_version: '>= 0.49.0',
   default_options: [
     'c_std=c99',
-    'cpp_std=c++14',
-    'warning_level=2',
+    'build.c_std=c99',
+    'cpp_std=c++17',
+    'build.cpp_std=c++17',
+    'warning_level=3',
+
+    # This is only here to build subprojects as static libraries; MPD
+    # itself doesn't ship any libraries.
+    'default_library=static',
   ],
   license: 'GPLv2+',
 )
@@ -16,18 +22,20 @@ version_cxx = vcs_tag(input: 'src/GitVersion.cxx', output: 'GitVersion.cxx')
 compiler = meson.get_compiler('cpp')
 c_compiler = meson.get_compiler('c')
 
-if compiler.get_id() == 'gcc' and compiler.version().version_compare('<6')
-  warning('Your GCC version is too old.  You need at least version 6.')
-elif compiler.get_id() == 'clang' and compiler.version().version_compare('<3')
-  warning('Your clang version is too old.  You need at least version 3.')
+if compiler.get_id() == 'gcc' and compiler.version().version_compare('<8')
+  warning('Your GCC version is too old.  You need at least version 8.')
+elif compiler.get_id() == 'clang' and compiler.version().version_compare('<5')
+  warning('Your clang version is too old.  You need at least version 5.')
 endif
 
+version_conf = configuration_data()
+version_conf.set_quoted('PACKAGE', meson.project_name())
+version_conf.set_quoted('PACKAGE_NAME', meson.project_name())
+version_conf.set_quoted('VERSION', meson.project_version())
+version_conf.set_quoted('PROTOCOL_VERSION', '0.22.0')
+configure_file(output: 'Version.h', configuration: version_conf)
+
 conf = configuration_data()
-conf.set_quoted('PACKAGE', meson.project_name())
-conf.set_quoted('PACKAGE_NAME', meson.project_name())
-conf.set_quoted('PACKAGE_VERSION', meson.project_version())
-conf.set_quoted('VERSION', meson.project_version())
-conf.set_quoted('PROTOCOL_VERSION', '0.21.11')
 conf.set_quoted('SYSTEM_CONFIG_FILE_LOCATION', join_paths(get_option('prefix'), get_option('sysconfdir'), 'mpd.conf'))
 
 common_cppflags = [
@@ -41,6 +49,9 @@ common_cxxflags = [
 ]
 
 test_common_flags = [
+  '-Wvla',
+  '-Wdouble-promotion',
+
   '-fvisibility=hidden',
 
   '-ffast-math',
@@ -57,13 +68,15 @@ test_cxxflags = test_common_flags + [
   '-Wcast-qual',
   '-Wwrite-strings',
   '-Wsign-compare',
+  '-Wcomma',
+  '-Wextra-semi',
+  '-Wheader-hygiene',
+  '-Winconsistent-missing-destructor-override',
+  '-Wunreachable-code-break',
+  '-Wunused',
+  '-Wused-but-marked-unused',
 
   '-Wno-non-virtual-dtor',
-
-  # work around bogus GCC7 warning "mangled name for ... will change
-  # in C++17 because the exception specification is part of a function
-  # type"
-  '-Wno-noexcept-type',
 ]
 
 if compiler.get_id() == 'clang'
@@ -97,6 +110,13 @@ if get_option('buildtype') != 'debug'
   test_ldflags += [
     '-Wl,--gc-sections',
   ]
+endif
+
+if get_option('fuzzer')
+  fuzzer_flags = ['-fsanitize=fuzzer,address,undefined']
+  add_global_arguments(fuzzer_flags, language: 'cpp')
+  add_global_arguments(fuzzer_flags, language: 'c')
+  add_global_link_arguments(fuzzer_flags, language: 'cpp')
 endif
 
 add_global_arguments(common_cxxflags + compiler.get_supported_arguments(test_cxxflags), language: 'cpp')
@@ -133,8 +153,6 @@ add_global_arguments(common_cppflags, language: 'cpp')
 
 enable_daemon = not is_windows and not is_android and get_option('daemon')
 conf.set('ENABLE_DAEMON', enable_daemon)
-
-conf.set('HAVE_LOCALE_H', compiler.has_header('locale.h'))
 
 conf.set('HAVE_GETPWNAM_R', compiler.has_function('getpwnam_r'))
 conf.set('HAVE_GETPWUID_R', compiler.has_function('getpwuid_r'))
@@ -192,6 +210,17 @@ if boost_dep.version() == '1.67'
   warning('Your Boost version 1.67 is known to be buggy, and the MPD build will fail. Please upgrade to Boost 1.68 or later.')
 endif
 
+log = static_library(
+  'log',
+  'src/Log.cxx',
+  'src/LogBackend.cxx',
+  include_directories: inc,
+)
+
+log_dep = declare_dependency(
+  link_with: log,
+)
+
 sources = [
   version_cxx,
   'src/Main.cxx',
@@ -220,23 +249,23 @@ sources = [
   'src/decoder/DecoderPrint.cxx',
   'src/client/Listener.cxx',
   'src/client/Client.cxx',
-  'src/client/ClientEvent.cxx',
-  'src/client/ClientExpire.cxx',
-  'src/client/ClientGlobal.cxx',
-  'src/client/ClientIdle.cxx',
-  'src/client/ClientList.cxx',
-  'src/client/ClientNew.cxx',
-  'src/client/ClientProcess.cxx',
-  'src/client/ClientRead.cxx',
-  'src/client/ClientWrite.cxx',
-  'src/client/ClientMessage.cxx',
-  'src/client/ClientSubscribe.cxx',
-  'src/client/ClientFile.cxx',
+  'src/client/Config.cxx',
+  'src/client/Domain.cxx',
+  'src/client/Event.cxx',
+  'src/client/Expire.cxx',
+  'src/client/Idle.cxx',
+  'src/client/List.cxx',
+  'src/client/New.cxx',
+  'src/client/Process.cxx',
+  'src/client/Read.cxx',
+  'src/client/Write.cxx',
+  'src/client/Message.cxx',
+  'src/client/Subscribe.cxx',
+  'src/client/File.cxx',
   'src/client/Response.cxx',
+  'src/client/ThreadBackgroundCommand.cxx',
   'src/Listen.cxx',
   'src/LogInit.cxx',
-  'src/LogBackend.cxx',
-  'src/Log.cxx',
   'src/ls.cxx',
   'src/Instance.cxx',
   'src/win32/Win32Main.cxx',
@@ -281,6 +310,7 @@ sources = [
   'src/TagSave.cxx',
   'src/TagFile.cxx',
   'src/TagStream.cxx',
+  'src/TagAny.cxx',
   'src/TimePrint.cxx',
   'src/mixer/Volume.cxx',
   'src/PlaylistFile.cxx',
@@ -314,6 +344,8 @@ endif
 
 subdir('src/util')
 subdir('src/time')
+subdir('src/io')
+subdir('src/io/uring')
 subdir('src/system')
 subdir('src/thread')
 subdir('src/net')
@@ -327,6 +359,7 @@ subdir('src/lib/smbclient')
 subdir('src/lib/zlib')
 
 subdir('src/lib/alsa')
+subdir('src/lib/chromaprint')
 subdir('src/lib/curl')
 subdir('src/lib/expat')
 subdir('src/lib/ffmpeg')
@@ -340,6 +373,8 @@ subdir('src/lib/sqlite')
 subdir('src/lib/systemd')
 subdir('src/lib/upnp')
 subdir('src/lib/yajl')
+
+subdir('src/lib/crypto')
 
 subdir('src/fs')
 subdir('src/config')
@@ -365,9 +400,16 @@ endif
 if sqlite_dep.found()
   sources += [
     'src/command/StickerCommands.cxx',
-    'src/sticker/StickerDatabase.cxx',
-    'src/sticker/StickerPrint.cxx',
+    'src/sticker/Database.cxx',
+    'src/sticker/Print.cxx',
     'src/sticker/SongSticker.cxx',
+  ]
+endif
+
+if chromaprint_dep.found()
+  sources += [
+    'src/command/FingerprintCommands.cxx',
+    'src/lib/chromaprint/DecoderClient.cxx',
   ]
 endif
 
@@ -464,8 +506,10 @@ mpd = build_target(
     sqlite_dep,
     zeroconf_dep,
     more_deps,
+    chromaprint_dep,
   ],
   link_args: link_args,
+  build_by_default: not get_option('fuzzer'),
   install: not is_android and not is_haiku,
 )
 
@@ -501,10 +545,12 @@ install_data(
   install_dir: join_paths(get_option('datadir'), 'doc', meson.project_name()),
 )
 
-if get_option('documentation')
-  subdir('doc')
-endif
+subdir('doc')
 
 if get_option('test')
   subdir('test')
+endif
+
+if get_option('fuzzer')
+  subdir('test/fuzzer')
 endif

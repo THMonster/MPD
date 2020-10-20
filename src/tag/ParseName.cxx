@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,19 +19,21 @@
 
 #include "ParseName.hxx"
 #include "util/ASCII.hxx"
+#include "util/StringView.hxx"
 
-#include <assert.h>
+#include <cassert>
+
 #include <string.h>
 
 TagType
-tag_name_parse(const char *name) noexcept
+tag_name_parse(StringView name) noexcept
 {
 	assert(name != nullptr);
 
 	for (unsigned i = 0; i < TAG_NUM_OF_ITEM_TYPES; ++i) {
 		assert(tag_item_names[i] != nullptr);
 
-		if (strcmp(name, tag_item_names[i]) == 0)
+		if (name.Equals(tag_item_names[i]))
 			return (TagType)i;
 	}
 
@@ -47,6 +49,21 @@ tag_name_parse_i(const char *name) noexcept
 		assert(tag_item_names[i] != nullptr);
 
 		if (StringEqualsCaseASCII(name, tag_item_names[i]))
+			return (TagType)i;
+	}
+
+	return TAG_NUM_OF_ITEM_TYPES;
+}
+
+TagType
+tag_name_parse_i(StringView name) noexcept
+{
+	assert(name != nullptr);
+
+	for (unsigned i = 0; i < TAG_NUM_OF_ITEM_TYPES; ++i) {
+		assert(tag_item_names[i] != nullptr);
+
+		if (name.EqualsIgnoreCase(tag_item_names[i]))
 			return (TagType)i;
 	}
 

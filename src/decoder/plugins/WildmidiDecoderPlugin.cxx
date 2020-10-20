@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -26,7 +26,6 @@
 #include "fs/FileSystem.hxx"
 #include "fs/Path.hxx"
 #include "fs/NarrowPath.hxx"
-#include "Log.hxx"
 #include "PluginUnavailable.hxx"
 
 #ifdef _WIN32
@@ -171,15 +170,7 @@ static const char *const wildmidi_suffixes[] = {
 	nullptr
 };
 
-const struct DecoderPlugin wildmidi_decoder_plugin = {
-	"wildmidi",
-	wildmidi_init,
-	wildmidi_finish,
-	nullptr,
-	wildmidi_file_decode,
-	wildmidi_scan_file,
-	nullptr,
-	nullptr,
-	wildmidi_suffixes,
-	nullptr,
-};
+constexpr DecoderPlugin wildmidi_decoder_plugin =
+	DecoderPlugin("wildmidi", wildmidi_file_decode, wildmidi_scan_file)
+	.WithInit(wildmidi_init, wildmidi_finish)
+	.WithSuffixes(wildmidi_suffixes);

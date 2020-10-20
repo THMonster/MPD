@@ -66,7 +66,16 @@ Binary Responses
 Some commands can return binary data.  This is initiated by a line
 containing ``binary: 1234`` (followed as usual by a newline).  After
 that, the specified number of bytes of binary data follows, then a
-newline, and finally the ``OK`` line.  Example::
+newline, and finally the ``OK`` line.
+
+If the object to be transmitted is large, the server may choose a
+reasonable chunk size and transmit only a portion.  Usually, the
+response also contains a ``size`` line which specifies the total
+(uncropped) size, and the command usually has a way to specify an
+offset into the object; this way, the client can copy the whole file
+without blocking the connection for too long.
+
+Example::
 
   foo: bar
   binary: 42
@@ -163,7 +172,7 @@ syntax::
 
  find EXPRESSION
 
-``EXPRESSION`` is a string enclosed in parantheses which can be one
+``EXPRESSION`` is a string enclosed in parentheses which can be one
 of:
 
 - ``(TAG == 'VALUE')``: match a tag value; if there are multiple
@@ -209,15 +218,15 @@ of:
   or more attributes may be ``*``).
 
 - ``(!EXPRESSION)``: negate an expression.  Note that each expression
-  must be enclosed in parantheses, e.g. :code:`(!(artist == 'VALUE'))`
+  must be enclosed in parentheses, e.g. :code:`(!(artist == 'VALUE'))`
   (which is equivalent to :code:`(artist != 'VALUE')`)
 
 - ``(EXPRESSION1 AND EXPRESSION2 ...)``: combine two or
   more expressions with logical "and".  Note that each expression must
-  be enclosed in parantheses, e.g. :code:`((artist == 'FOO') AND
+  be enclosed in parentheses, e.g. :code:`((artist == 'FOO') AND
   (album == 'BAR'))`
 
-The :command:`find` commands are case sensitive, which
+The :command:`find` commands are case sensitive, while
 :command:`search` and related commands ignore case.
 
 Prior to MPD 0.21, the syntax looked like this::
@@ -274,6 +283,12 @@ The following tags are supported by :program:`MPD`:
 * **date**: the song's release date. This is usually a 4-digit year.
 * **composer**: the artist who composed the song.
 * **performer**: the artist who performed the song.
+* **conductor**: the conductor who conducted the song.
+* **work**: `"a work is a distinct intellectual or artistic creation,
+  which can be expressed in the form of one or more audio recordings" <https://musicbrainz.org/doc/Work>`_
+* **grouping**: "used if the sound belongs to a larger category of
+  sounds/music" (`from the IDv2.4.0 TIT1 description
+  <http://id3.org/id3v2.4.0-frames>`_).
 * **comment**: a human-readable comment about this song. The exact meaning of this tag is not well-defined.
 * **disc**: the decimal disc number in a multi-disc album.
 * **label**: the name of the label or publisher.
@@ -374,7 +389,9 @@ Querying :program:`MPD`'s status
 
 :command:`currentsong`
     Displays the song info of the current song (same song that
-    is identified in status).
+    is identified in status). Information about the current song
+    is represented by key-value pairs, one on each line. The first
+    pair must be the `file` key-value pair.
 
 .. _command_idle:
 
@@ -398,9 +415,11 @@ Querying :program:`MPD`'s status
     - ``sticker``: the sticker database has been modified.
     - ``subscription``: a client has subscribed or unsubscribed to a channel
     - ``message``: a message was received on a channel this client is subscribed to; this event is only emitted when the queue is empty
+    - ``neighbor``: a neighbor was found or lost
+    - ``mount``: the mount list has changed
 
     Change events accumulate, even while the connection is not in
-    "idle" mode; no events gets lost while the client is doing
+    "idle" mode; no events get lost while the client is doing
     something else with the connection.  If an event had already
     occurred since the last call, the new :ref:`idle <command_idle>`
     command will return immediately.
@@ -424,6 +443,8 @@ Querying :program:`MPD`'s status
     Reports the current status of the player and the volume
     level.
 
+    - ``partition``: the name of the current partition (see
+      :ref:`partition_commands`)
     - ``volume``: ``0-100`` (deprecated: ``-1`` if the volume cannot
       be determined)
     - ``repeat``: ``0`` or ``1``
@@ -515,7 +536,7 @@ Playback options
     ``auto``
     .
     Changing the mode during playback may take several
-    seconds, because the new settings does not affect the
+    seconds, because the new settings do not affect the
     buffered data.
     This command triggers the
     ``options`` idle event.
@@ -535,10 +556,10 @@ Controlling playback
 :command:`next`
     Plays next song in the playlist.
 
-:command:`pause {PAUSE}`
-    Toggles pause/resumes playing, ``PAUSE`` is 0 or 1.
-
-    The use of pause command without the PAUSE argument is deprecated.
+:command:`pause {STATE}`
+    Pause or resume playback.  Pass :samp:`1` to pause playback or
+    :samp:`0` to resume playback.  Without the parameter, the pause
+    state is toggled.
 
 :command:`play [SONGPOS]`
     Begins playing the playlist at song number
@@ -809,11 +830,12 @@ The music database
 ==================
 
 :command:`albumart {URI} {OFFSET}`
-    Searches the directory the file ``URI``
-    resides in and attempts to return a chunk of an album
+    Locate album art for the given song and return a chunk of an album
     art image file at offset ``OFFSET``.
-    Uses the filename "cover" with any of ".png, .jpg,
-    .tiff, .bmp".
+
+    This is currently implemented by searching the directory the file
+    resides in for a file called :file:`cover.png`, :file:`cover.jpg`,
+    :file:`cover.tiff` or :file:`cover.bmp`.
 
     Returns the file size and actual number
     of bytes read at the requested offset, followed
@@ -822,7 +844,7 @@ The music database
 
     Example::
 
-     albumart
+     albumart foo/bar.ogg 0
      size: 1024768
      binary: 8192
      <8192 bytes>
@@ -846,9 +868,20 @@ The music database
      count group artist
      count title Echoes group artist
 
-    A group with an empty value contains counts of matching song which
-    don't this group tag.  It exists only if at least one such song is
+    A group with an empty value contains counts of matching songs which
+    don't have this group tag.  It exists only if at least one such song is
     found.
+
+:command:`getfingerprint {URI}`
+
+    Calculate the song's audio fingerprint.  Example (abbreviated fingerprint)::
+
+      getfingerprint "foo/bar.ogg"
+      chromaprint: AQACcEmSREmWJJmkIT_6CCf64...
+      OK
+
+    This command is only available if MPD was built with
+    :file:`libchromaprint` (``-Dchromaprint=enabled``).
 
 .. _command_find:
 
@@ -876,7 +909,7 @@ The music database
 
 .. _command_findadd:
 
-:command:`findadd {FILTER}`
+:command:`findadd {FILTER} [sort {TYPE}] [window {START:END}]`
     Search the database for songs matching
     ``FILTER`` (see :ref:`Filters <filter_syntax>`) and add them to
     the queue.  Parameters have the same meaning as for
@@ -981,6 +1014,30 @@ The music database
     decoder plugins support it.  For example, on Ogg files,
     this lists the Vorbis comments.
 
+:command:`readpicture {URI} {OFFSET}`
+    Locate a picture for the given song and return a chunk of the
+    image file at offset ``OFFSET``.  This is usually implemented by
+    reading embedded pictures from binary tags (e.g. ID3v2's ``APIC``
+    tag).
+
+    Returns the following values:
+
+    - ``size``: the total file size
+    - ``type``: the file's MIME type (optional)
+    - ``binary``: see :ref:`binary`
+
+    If the song file was recognized, but there is no picture, the
+    response is successful, but is otherwise empty.
+
+    Example::
+
+     readpicture foo/bar.ogg 0
+     size: 1024768
+     type: image/jpeg
+     binary: 8192
+     <8192 bytes>
+     OK
+
 .. _command_search:
 
 :command:`search {FILTER} [sort {TYPE}] [window {START:END}]`
@@ -991,14 +1048,14 @@ The music database
 
 .. _command_searchadd:
 
-:command:`searchadd {FILTER}`
+:command:`searchadd {FILTER} [sort {TYPE}] [window {START:END}]`
     Search the database for songs matching
     ``FILTER`` (see :ref:`Filters <filter_syntax>`) and add them to
     the queue.
 
     Parameters have the same meaning as for :ref:`search <command_search>`.
 
-:command:`searchaddpl {NAME} {FILTER}`
+:command:`searchaddpl {NAME} {FILTER} [sort {TYPE}] [window {START:END}]`
     Search the database for songs matching
     ``FILTER`` (see :ref:`Filters <filter_syntax>`) and add them to
     the playlist named ``NAME``.
@@ -1038,8 +1095,8 @@ access NFS and SMB servers.
 Multiple storages can be "mounted" together, similar to the
 `mount` command on many operating
 systems, but without cooperation from the kernel.  No
-superuser privileges are necessary, beause this mapping exists
-only inside the :program:`MPD` process
+superuser privileges are necessary, because this mapping exists
+only inside the :program:`MPD` process.
 
 .. _command_mount:
 
@@ -1188,6 +1245,8 @@ Connection settings
     Announce that this client is interested in all tag
     types.  This is the default setting for new clients.
 
+.. _partition_commands:
+
 Partition commands
 ==================
 
@@ -1207,6 +1266,13 @@ client is assigned to one partition at a time.
 
 :command:`newpartition {NAME}`
     Create a new partition.
+
+:command:`delpartition {NAME}`
+    Delete a partition.  The partition must be empty (no connected
+    clients and no outputs).
+
+:command:`moveoutput {OUTPUTNAME}`
+    Move an output to the current partition.
 
 Audio output devices
 ====================
@@ -1296,6 +1362,9 @@ additional services.
 
 New messages are indicated by the ``message``
 idle event.
+
+If your MPD instance has multiple partitions, note that
+client-to-client messages are local to the current partition.
 
 :command:`subscribe {NAME}`
     Subscribe to a channel.  The channel is created if it

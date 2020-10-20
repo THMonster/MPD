@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,23 +20,21 @@
 #ifndef AUDIO_OUTPUT_SOURCE_HXX
 #define AUDIO_OUTPUT_SOURCE_HXX
 
-#include "util/Compiler.h"
 #include "SharedPipeConsumer.hxx"
-#include "AudioFormat.hxx"
 #include "ReplayGainMode.hxx"
-#include "pcm/PcmBuffer.hxx"
-#include "pcm/PcmDither.hxx"
+#include "pcm/AudioFormat.hxx"
+#include "pcm/Buffer.hxx"
+#include "pcm/Dither.hxx"
+#include "thread/Mutex.hxx"
 #include "util/ConstBuffer.hxx"
 
-#include <utility>
+#include <cassert>
+#include <cstdint>
 #include <memory>
-
-#include <assert.h>
-#include <stdint.h>
+#include <utility>
 
 struct MusicChunk;
 struct Tag;
-class Mutex;
 class Filter;
 class PreparedFilter;
 
@@ -108,7 +106,8 @@ class AudioOutputSource {
 	const MusicChunk *current_chunk = nullptr;
 
 	/**
-	 * The #Tag to be processed by the #AudioOutput.
+	 * The #Tag to be processed by the #AudioOutput.  It is owned
+	 * by #current_chunk (MusicChunk::tag).
 	 */
 	const Tag *pending_tag;
 
@@ -147,7 +146,7 @@ public:
 	/**
 	 * Ensure that ReadTag() or PeekData() return any input.
 	 *
-	 * Throws std::runtime_error on error
+	 * Throws on error
 	 *
 	 * @param mutex the #Mutex which protects the
 	 * #SharedPipeConsumer; it is locked by the caller, and may be
@@ -212,6 +211,12 @@ private:
 				       unsigned *replay_gain_serial_p);
 
 	ConstBuffer<void> FilterChunk(const MusicChunk &chunk);
+
+	void DropCurrentChunk() noexcept {
+		assert(current_chunk != nullptr);
+
+		pipe.Consume(*std::exchange(current_chunk, nullptr));
+	}
 };
 
 #endif

@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2019 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,6 +20,7 @@
 #ifndef MPD_DIRECTORY_HXX
 #define MPD_DIRECTORY_HXX
 
+#include "Ptr.hxx"
 #include "util/Compiler.h"
 #include "db/Visitor.hxx"
 #include "db/PlaylistVector.hxx"
@@ -29,6 +30,7 @@
 #include <boost/intrusive/list.hpp>
 
 #include <string>
+#include <string_view>
 
 /**
  * Virtual directory that is really an archive file or a folder inside
@@ -42,6 +44,12 @@ static constexpr unsigned DEVICE_INARCHIVE = -1;
  * value for Directory::device).
  */
 static constexpr unsigned DEVICE_CONTAINER = -2;
+
+/**
+ * Virtual directory that is really a playlist file (special value for
+ * Directory::device).
+ */
+static constexpr unsigned DEVICE_PLAYLIST = -3;
 
 class SongFilter;
 
@@ -110,6 +118,16 @@ public:
 		return new Directory(std::string(), nullptr);
 	}
 
+	/**
+	 * Is this really a regular file which is being treated like a
+	 * directory?
+	 */
+	bool IsReallyAFile() const noexcept {
+		return device == DEVICE_INARCHIVE ||
+			device == DEVICE_PLAYLIST ||
+			device == DEVICE_CONTAINER;
+	}
+
 	bool IsMount() const noexcept {
 		return mounted_database != nullptr;
 	}
@@ -129,16 +147,16 @@ public:
 	 *
 	 * @param name_utf8 the UTF-8 encoded name of the new sub directory
 	 */
-	Directory *CreateChild(const char *name_utf8) noexcept;
+	Directory *CreateChild(std::string_view name_utf8) noexcept;
 
 	/**
 	 * Caller must lock the #db_mutex.
 	 */
 	gcc_pure
-	const Directory *FindChild(const char *name) const noexcept;
+	const Directory *FindChild(std::string_view name) const noexcept;
 
 	gcc_pure
-	Directory *FindChild(const char *name) noexcept {
+	Directory *FindChild(std::string_view name) noexcept {
 		const Directory *cthis = this;
 		return const_cast<Directory *>(cthis->FindChild(name));
 	}
@@ -149,7 +167,7 @@ public:
 	 *
 	 * Caller must lock the #db_mutex.
 	 */
-	Directory *MakeChild(const char *name_utf8) noexcept {
+	Directory *MakeChild(std::string_view name_utf8) noexcept {
 		Directory *child = FindChild(name_utf8);
 		if (child == nullptr)
 			child = CreateChild(name_utf8);
@@ -165,10 +183,15 @@ public:
 		Directory *directory;
 
 		/**
-		 * The remaining URI part (without leading slash) or
-		 * nullptr if the given URI was consumed completely.
+		 * The URI part which resolved to the #directory.
 		 */
-		const char *uri;
+		std::string_view uri;
+
+		/**
+		 * The remaining URI part (without leading slash) or
+		 * empty if the given URI was consumed completely.
+		 */
+		std::string_view rest;
 	};
 
 	/**
@@ -178,7 +201,7 @@ public:
 	 * @return the Directory, or nullptr if none was found
 	 */
 	gcc_pure
-	LookupResult LookupDirectory(const char *uri) noexcept;
+	LookupResult LookupDirectory(std::string_view uri) noexcept;
 
 	gcc_pure
 	bool IsEmpty() const noexcept {
@@ -230,10 +253,10 @@ public:
 	 * Caller must lock the #db_mutex.
 	 */
 	gcc_pure
-	const Song *FindSong(const char *name_utf8) const noexcept;
+	const Song *FindSong(std::string_view name_utf8) const noexcept;
 
 	gcc_pure
-	Song *FindSong(const char *name_utf8) noexcept {
+	Song *FindSong(std::string_view name_utf8) noexcept {
 		const Directory *cthis = this;
 		return const_cast<Song *>(cthis->FindSong(name_utf8));
 	}
@@ -242,14 +265,14 @@ public:
 	 * Add a song object to this directory.  Its "parent" attribute must
 	 * be set already.
 	 */
-	void AddSong(Song *song) noexcept;
+	void AddSong(SongPtr song) noexcept;
 
 	/**
 	 * Remove a song object from this directory (which effectively
 	 * invalidates the song object, because the "parent" attribute becomes
-	 * stale), but does not free it.
+	 * stale), and return ownership to the caller.
 	 */
-	void RemoveSong(Song *song) noexcept;
+	SongPtr RemoveSong(Song *song) noexcept;
 
 	/**
 	 * Caller must lock the #db_mutex.
@@ -267,8 +290,8 @@ public:
 	 * Caller must lock #db_mutex.
 	 */
 	void Walk(bool recursive, const SongFilter *match,
-		  VisitDirectory visit_directory, VisitSong visit_song,
-		  VisitPlaylist visit_playlist) const;
+		  const VisitDirectory& visit_directory, const VisitSong& visit_song,
+		  const VisitPlaylist& visit_playlist) const;
 
 	gcc_pure
 	LightDirectory Export() const noexcept;

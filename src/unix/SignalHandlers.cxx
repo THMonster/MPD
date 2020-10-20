@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,17 +18,17 @@
  */
 
 #include "SignalHandlers.hxx"
+#include "Instance.hxx"
 #include "event/SignalMonitor.hxx"
 
 #ifndef _WIN32
 
 #include "Log.hxx"
 #include "LogInit.hxx"
-#include "event/Loop.hxx"
 #include "system/Error.hxx"
 #include "util/Domain.hxx"
 
-#include <signal.h>
+#include <csignal>
 
 static constexpr Domain signal_handlers_domain("signal_handlers");
 
@@ -47,17 +47,23 @@ x_sigaction(int signum, const struct sigaction *act)
 }
 
 static void
-handle_reload_event(void *) noexcept
+handle_reload_event(void *ctx) noexcept
 {
-	LogDebug(signal_handlers_domain, "got SIGHUP, reopening log files");
+	auto &instance = *(Instance *)ctx;
+
+	LogDebug(signal_handlers_domain, "got SIGHUP, reopening log files and flushing caches");
 	cycle_log_files();
+
+	instance.FlushCaches();
 }
 
 #endif
 
 void
-SignalHandlersInit(EventLoop &loop)
+SignalHandlersInit(Instance &instance)
 {
+	auto &loop = instance.event_loop;
+
 	SignalMonitorInit(loop);
 
 #ifndef _WIN32
@@ -71,7 +77,7 @@ SignalHandlersInit(EventLoop &loop)
 	SignalMonitorRegister(SIGINT, {&loop, HandleShutdownSignal});
 	SignalMonitorRegister(SIGTERM, {&loop, HandleShutdownSignal});
 
-	SignalMonitorRegister(SIGHUP, {nullptr, handle_reload_event});
+	SignalMonitorRegister(SIGHUP, {&instance, handle_reload_event});
 #endif
 }
 

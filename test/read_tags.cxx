@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -28,14 +28,15 @@
 #include "tag/Generic.hxx"
 #include "fs/Path.hxx"
 #include "fs/NarrowPath.hxx"
-#include "AudioFormat.hxx"
+#include "pcm/AudioFormat.hxx"
 #include "util/ScopeExit.hxx"
 #include "util/StringBuffer.hxx"
+#include "util/StringView.hxx"
 #include "util/PrintException.hxx"
 
+#include <cassert>
 #include <stdexcept>
 
-#include <assert.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -49,7 +50,7 @@ class DumpTagHandler final : public NullTagHandler {
 
 public:
 	DumpTagHandler() noexcept
-		:NullTagHandler(WANT_DURATION|WANT_TAG|WANT_PAIR) {}
+		:NullTagHandler(WANT_DURATION|WANT_TAG|WANT_PAIR|WANT_PICTURE) {}
 
 	bool IsEmpty() const noexcept {
 		return empty;
@@ -59,17 +60,25 @@ public:
 		printf("duration=%f\n", duration.ToDoubleS());
 	}
 
-	void OnTag(TagType type, const char *value) noexcept override {
-		printf("[%s]=%s\n", tag_item_names[type], value);
+	void OnTag(TagType type, StringView value) noexcept override {
+		printf("[%s]=%.*s\n", tag_item_names[type],
+		       int(value.size), value.data);
 		empty = false;
 	}
 
-	void OnPair(const char *key, const char *value) noexcept override {
-		printf("\"%s\"=%s\n", key, value);
+	void OnPair(StringView key, StringView value) noexcept override {
+		printf("\"%.*s\"=%.*s\n",
+		       int(key.size), key.data,
+		       int(value.size), value.data);
 	}
 
 	void OnAudioFormat(AudioFormat af) noexcept override {
 		printf("%s\n", ToString(af).c_str());
+	}
+
+	void OnPicture(const char *mime_type,
+		       ConstBuffer<void> buffer) noexcept override {
+		printf("picture mime='%s' size=%zu\n", mime_type, buffer.size);
 	}
 };
 

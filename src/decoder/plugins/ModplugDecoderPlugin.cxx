@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,6 +24,7 @@
 #include "util/WritableBuffer.hxx"
 #include "util/Domain.hxx"
 #include "util/RuntimeError.hxx"
+#include "util/StringView.hxx"
 #include "Log.hxx"
 
 #ifdef _WIN32
@@ -34,7 +35,7 @@
 
 #include <libmodplug/modplug.h>
 
-#include <assert.h>
+#include <cassert>
 
 static constexpr Domain modplug_domain("modplug");
 
@@ -203,15 +204,7 @@ static const char *const mod_suffixes[] = {
 	nullptr
 };
 
-const struct DecoderPlugin modplug_decoder_plugin = {
-	"modplug",
-	modplug_decoder_init,
-	nullptr,
-	mod_decode,
-	nullptr,
-	nullptr,
-	modplug_scan_stream,
-	nullptr,
-	mod_suffixes,
-	nullptr,
-};
+constexpr DecoderPlugin modplug_decoder_plugin =
+	DecoderPlugin("modplug", mod_decode, modplug_scan_stream)
+	.WithInit(modplug_decoder_init)
+	.WithSuffixes(mod_suffixes);

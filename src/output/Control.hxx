@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,31 +21,24 @@
 #define MPD_OUTPUT_CONTROL_HXX
 
 #include "Source.hxx"
-#include "AudioFormat.hxx"
+#include "pcm/AudioFormat.hxx"
 #include "thread/Thread.hxx"
 #include "thread/Mutex.hxx"
 #include "thread/Cond.hxx"
 #include "system/PeriodClock.hxx"
 #include "util/Compiler.h"
 
-#include <utility>
+#include <cstdint>
 #include <exception>
+#include <map>
 #include <memory>
 #include <string>
-#include <map>
-
-#ifndef NDEBUG
-#include <assert.h>
-#endif
-
-#include <stdint.h>
 
 enum class ReplayGainMode : uint8_t;
 struct FilteredAudioOutput;
 struct MusicChunk;
 struct ConfigBlock;
 class MusicPipe;
-class Mutex;
 class Mixer;
 class AudioOutputClient;
 
@@ -54,6 +47,13 @@ class AudioOutputClient;
  */
 class AudioOutputControl {
 	std::unique_ptr<FilteredAudioOutput> output;
+
+	/**
+	 * A copy of FilteredAudioOutput::name which we need just in
+	 * case this is a "dummy" output (output==nullptr) because
+	 * this output has been moved to another partitioncommands.
+	 */
+	const std::string name;
 
 	/**
 	 * The PlayerControl object which "owns" this output.  This
@@ -197,6 +197,15 @@ class AudioOutputControl {
 	bool allow_play = true;
 
 	/**
+	 * Was an #AudioOutputInterrupted caught?  In this case,
+	 * playback is suspended, and the output thread waits for a
+	 * command.
+	 *
+	 * This field is only valid while the output is open.
+	 */
+	bool caught_interrupted;
+
+	/**
 	 * True while the OutputThread is inside ao_play().  This
 	 * means the PlayerThread does not need to wake up the
 	 * OutputThread when new chunks are added to the MusicPipe,
@@ -218,6 +227,15 @@ class AudioOutputControl {
 	 */
 	bool skip_delay;
 
+	/**
+	 * Has Command::KILL already been sent?  This field is only
+	 * defined if `thread` is defined.  It shall avoid sending the
+	 * command twice.
+	 *
+	 * Protected by #mutex.
+	 */
+	bool killed;
+
 public:
 	/**
 	 * This mutex protects #open, #fail_timer, #pipe.
@@ -233,7 +251,7 @@ public:
 	AudioOutputControl &operator=(const AudioOutputControl &) = delete;
 
 	/**
-	 * Throws #std::runtime_error on error.
+	 * Throws on error.
 	 */
 	void Configure(const ConfigBlock &block);
 
@@ -252,6 +270,10 @@ public:
 
 	gcc_pure
 	Mixer *GetMixer() const noexcept;
+
+	bool IsDummy() const noexcept {
+		return !output;
+	}
 
 	/**
 	 * Caller must lock the mutex.
@@ -291,6 +313,14 @@ public:
 		return last_error;
 	}
 
+	/**
+	 * Detach and return the #FilteredAudioOutput instance and,
+	 * replacing it here with a "dummy" object.
+	 */
+	std::unique_ptr<FilteredAudioOutput> Steal() noexcept;
+	void ReplaceDummy(std::unique_ptr<FilteredAudioOutput> new_output,
+			  bool _enabled) noexcept;
+
 	void StartThread();
 
 	/**
@@ -307,7 +337,12 @@ public:
 	 *
 	 * Caller must lock the mutex.
 	 */
-	void WaitForCommand() noexcept;
+	void WaitForCommand(std::unique_lock<Mutex> &lock) noexcept;
+
+	void LockWaitForCommand() noexcept {
+		std::unique_lock<Mutex> lock(mutex);
+		WaitForCommand(lock);
+	}
 
 	/**
 	 * Sends a command, but does not wait for completion.
@@ -321,7 +356,7 @@ public:
 	 *
 	 * Caller must lock the mutex.
 	 */
-	void CommandWait(Command cmd) noexcept;
+	void CommandWait(std::unique_lock<Mutex> &lock, Command cmd) noexcept;
 
 	/**
 	 * Lock the object and execute the command synchronously.
@@ -330,7 +365,7 @@ public:
 
 	void BeginDestroy() noexcept;
 
-	const std::map<std::string, std::string> GetAttributes() const noexcept;
+	std::map<std::string, std::string> GetAttributes() const noexcept;
 	void SetAttribute(std::string &&name, std::string &&value);
 
 	/**
@@ -355,9 +390,15 @@ public:
 	 * Caller must lock the mutex.
 	 */
 	void EnableDisableAsync();
+
+	void LockEnableDisableAsync() {
+		const std::lock_guard<Mutex> protect(mutex);
+		EnableDisableAsync();
+	}
+
 	void LockPauseAsync() noexcept;
 
-	void CloseWait() noexcept;
+	void CloseWait(std::unique_lock<Mutex> &lock) noexcept;
 	void LockCloseWait() noexcept;
 
 	/**
@@ -373,14 +414,15 @@ public:
 	/**
 	 * Caller must lock the mutex.
 	 *
-	 * Throws #std::runtime_error on error.
+	 * Throws on error.
 	 */
 	void InternalOpen2(AudioFormat in_audio_format);
 
 	/**
 	 * Caller must lock the mutex.
 	 */
-	bool Open(AudioFormat audio_format, const MusicPipe &mp) noexcept;
+	bool Open(std::unique_lock<Mutex> &lock,
+		  AudioFormat audio_format, const MusicPipe &mp) noexcept;
 
 	/**
 	 * Opens or closes the device, depending on the "enabled"
@@ -404,8 +446,29 @@ public:
 	gcc_pure
 	bool LockIsChunkConsumed(const MusicChunk &chunk) const noexcept;
 
-	void ClearTailChunk(const MusicChunk &chunk) {
+	/**
+	 * There's only one chunk left in the pipe (#pipe), and all
+	 * audio outputs have consumed it already.  Clear the
+	 * reference.
+	 *
+	 * This stalls playback to give the caller a chance to shift
+	 * the #MusicPipe without getting disturbed; after this,
+	 * LockAllowPlay() must be called to resume playback.
+	 */
+	void ClearTailChunk(const MusicChunk &chunk) noexcept {
+		if (!IsOpen())
+			return;
+
 		source.ClearTailChunk(chunk);
+		allow_play = false;
+	}
+
+	/**
+	 * Locking wrapper for ClearTailChunk().
+	 */
+	void LockClearTailChunk(const MusicChunk &chunk) noexcept {
+		const std::lock_guard<Mutex> lock(mutex);
+		ClearTailChunk(chunk);
 	}
 
 	void LockPlay() noexcept;
@@ -490,7 +553,7 @@ private:
 	 * @return true if playback should be continued, false if a
 	 * command was issued
 	 */
-	bool WaitForDelay() noexcept;
+	bool WaitForDelay(std::unique_lock<Mutex> &lock) noexcept;
 
 	/**
 	 * Caller must lock the mutex.
@@ -500,7 +563,7 @@ private:
 	/**
 	 * Caller must lock the mutex.
 	 */
-	bool PlayChunk() noexcept;
+	bool PlayChunk(std::unique_lock<Mutex> &lock) noexcept;
 
 	/**
 	 * Plays all remaining chunks, until the tail of the pipe has
@@ -514,14 +577,14 @@ private:
 	 * @return true if at least one chunk has been available,
 	 * false if the tail of the pipe was already reached
 	 */
-	bool InternalPlay() noexcept;
+	bool InternalPlay(std::unique_lock<Mutex> &lock) noexcept;
 
 	/**
 	 * Runs inside the OutputThread.
 	 * Caller must lock the mutex.
 	 * Handles exceptions.
 	 */
-	void InternalPause() noexcept;
+	void InternalPause(std::unique_lock<Mutex> &lock) noexcept;
 
 	/**
 	 * Runs inside the OutputThread.
@@ -529,6 +592,8 @@ private:
 	 * Handles exceptions.
 	 */
 	void InternalDrain() noexcept;
+
+	void StopThread() noexcept;
 
 	/**
 	 * The OutputThread.

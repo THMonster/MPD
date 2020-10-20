@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 The Music Player Daemon Project
+ * Copyright 2003-2020 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,14 +23,13 @@
 #include "NeighborPlugin.hxx"
 #include "Info.hxx"
 #include "config/Data.hxx"
-#include "config/Domain.hxx"
 #include "config/Block.hxx"
 #include "util/RuntimeError.hxx"
 
 #include <stdexcept>
 
-NeighborGlue::NeighborGlue() noexcept {}
-NeighborGlue::~NeighborGlue() noexcept {}
+NeighborGlue::NeighborGlue() noexcept = default;
+NeighborGlue::~NeighborGlue() noexcept = default;
 
 static std::unique_ptr<NeighborExplorer>
 CreateNeighborExplorer(EventLoop &loop, NeighborListener &listener,
@@ -85,8 +84,8 @@ NeighborGlue::Open()
 void
 NeighborGlue::Close() noexcept
 {
-	for (auto i = explorers.begin(), end = explorers.end(); i != end; ++i)
-		i->explorer->Close();
+	for (auto & explorer : explorers)
+		explorer.explorer->Close();
 }
 
 NeighborGlue::List
