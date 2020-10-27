@@ -32,6 +32,7 @@
 #include "util/StringCompare.hxx"
 
 #include "util/Domain.hxx"
+#include "Log.hxx"
 
 #include <memory>
 
