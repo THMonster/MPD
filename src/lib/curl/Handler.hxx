@@ -66,7 +66,7 @@ public:
 	 */
 	virtual void OnError(std::exception_ptr e) noexcept = 0;
 
-	virtual void OnErrorWithReconnect(double resume_offset) {};
+	virtual void OnErrorWithReconnect(double resume_offset) = 0;
 };
 
 #endif

@@ -18,20 +18,20 @@
  */
 
 #include "QobuzInputPlugin.hxx"
-#include "CurlInputPlugin.hxx"
-#include "Log.hxx"
-#include "PluginUnavailable.hxx"
 #include "QobuzClient.hxx"
-#include "QobuzTagScanner.hxx"
 #include "QobuzTrackRequest.hxx"
-#include "config/Block.hxx"
+#include "QobuzTagScanner.hxx"
+#include "CurlInputPlugin.hxx"
+#include "PluginUnavailable.hxx"
+#include "input/ProxyInputStream.hxx"
 #include "input/FailingInputStream.hxx"
 #include "input/InputPlugin.hxx"
 #include "config/Block.hxx"
 #include "lib/crypto/MD5.hxx"
 #include "thread/Mutex.hxx"
-#include "util/Domain.hxx"
 #include "util/StringCompare.hxx"
+
+#include "util/Domain.hxx"
 
 #include <memory>
 
