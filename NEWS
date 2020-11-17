@@ -1,3 +1,13 @@
+ver 0.22.3 (2020/11/06)
+* playlist
+  - add option "as_directory", making CUE file expansion optional
+* storage
+  - curl: fix crash bug
+* filter
+  - fix garbage after "Audio format not supported by filter" message
+  - ffmpeg: support planar output
+  - ffmpeg: support sample formats other than 16 bit
+
 ver 0.22.2 (2020/10/28)
 * database
   - simple: purge songs and virtual directories for unavailable plugins
