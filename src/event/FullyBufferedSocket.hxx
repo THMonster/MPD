@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2020 The Music Player Daemon Project
+ * Copyright 2003-2021 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -43,6 +43,10 @@ public:
 	void Close() noexcept {
 		IdleMonitor::Cancel();
 		BufferedSocket::Close();
+	}
+
+	std::size_t GetOutputMaxSize() const noexcept {
+		return output.max_size();
 	}
 
 private:

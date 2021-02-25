@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2020 The Music Player Daemon Project
+ * Copyright 2003-2021 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -405,8 +405,15 @@ input_curl_init(EventLoop &event_loop, const ConfigBlock &block)
 	proxy_user = block.GetBlockValue("proxy_user");
 	proxy_password = block.GetBlockValue("proxy_password");
 
-	verify_peer = block.GetBlockValue("verify_peer", true);
-	verify_host = block.GetBlockValue("verify_host", true);
+#ifdef ANDROID
+	// TODO: figure out how to use Android's CA certificates and re-enable verify
+	constexpr bool default_verify = false;
+#else
+	constexpr bool default_verify = true;
+#endif
+
+	verify_peer = block.GetBlockValue("verify_peer", default_verify);
+	verify_host = block.GetBlockValue("verify_host", default_verify);
 }
 
 static void

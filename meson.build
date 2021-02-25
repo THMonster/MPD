@@ -1,7 +1,7 @@
 project(
   'mpd',
   ['c', 'cpp'],
-  version: '0.22.3',
+  version: '0.22.6',
   meson_version: '>= 0.49.0',
   default_options: [
     'c_std=c11',
@@ -32,7 +32,7 @@ version_conf = configuration_data()
 version_conf.set_quoted('PACKAGE', meson.project_name())
 version_conf.set_quoted('PACKAGE_NAME', meson.project_name())
 version_conf.set_quoted('VERSION', meson.project_version())
-version_conf.set_quoted('PROTOCOL_VERSION', '0.22.0')
+version_conf.set_quoted('PROTOCOL_VERSION', '0.22.4')
 configure_file(output: 'Version.h', configuration: version_conf)
 
 conf = configuration_data()

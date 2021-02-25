@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2020 The Music Player Daemon Project
+ * Copyright 2003-2021 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -326,6 +326,11 @@ CommandResult
 handle_move(Client &client, Request args, [[maybe_unused]] Response &r)
 {
 	RangeArg range = args.ParseRange(0);
+	if (range.IsOpenEnded()) {
+		r.Error(ACK_ERROR_ARG, "Open-ended range not supported");
+		return CommandResult::ERROR;
+	}
+
 	int to = args.ParseInt(1);
 	client.GetPartition().MoveRange(range.start, range.end, to);
 	return CommandResult::OK;

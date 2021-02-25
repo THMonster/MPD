@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2020 The Music Player Daemon Project
+ * Copyright 2003-2021 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -84,6 +84,12 @@ public:
 	 */
 	TagMask tag_mask = TagMask::All();
 
+	/**
+	 * The maximum number of bytes transmitted in a binary
+	 * response.  Can be changed with the "binarylimit" command.
+	 */
+	size_t binary_limit = 8192;
+
 private:
 	static constexpr size_t MAX_SUBSCRIPTIONS = 16;
 
@@ -122,6 +128,7 @@ public:
 	~Client() noexcept;
 
 	using FullyBufferedSocket::GetEventLoop;
+	using FullyBufferedSocket::GetOutputMaxSize;
 
 	gcc_pure
 	bool IsExpired() const noexcept {
