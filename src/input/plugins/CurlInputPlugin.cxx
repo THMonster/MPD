@@ -485,9 +485,9 @@ CurlInputStream::InitEasy()
 
   /* abort if slower than x bytes/sec during y seconds */
   if (seekable == true) {
-    FormatDebug(curl_domain, "set low speed limit");
-    request->SetOption(CURLOPT_LOW_SPEED_LIMIT, 500000L);
-    request->SetOption(CURLOPT_LOW_SPEED_TIME, 5L);
+   // FormatDebug(curl_domain, "set low speed limit");
+   // request->SetOption(CURLOPT_LOW_SPEED_LIMIT, 500000L);
+   // request->SetOption(CURLOPT_LOW_SPEED_TIME, 5L);
   }
 }
 
