@@ -444,7 +444,7 @@ CurlInputStream::CurlInputStream(EventLoop &event_loop, const char *_url,
 			continue;
 		}
 		request_headers.Append((key + ":" + header).c_str());
-	{
+	}
 }
 
 CurlInputStream::~CurlInputStream() noexcept
