@@ -193,7 +193,7 @@ ParseTimeStamp(const char *s)
 {
 	try {
 		// TODO: make this more robust
-		return ParseTimePoint(s, "%a, %d %b %Y %T %Z");
+		return ParseTimePoint(s, "%a, %d %b %Y %T");
 	} catch (...) {
 		return std::chrono::system_clock::time_point::min();
 	}
@@ -261,6 +261,10 @@ public:
 		request.SetOption(CURLOPT_CUSTOMREQUEST, "PROPFIND");
 		request.SetOption(CURLOPT_FOLLOWLOCATION, 1L);
 		request.SetOption(CURLOPT_MAXREDIRS, 1L);
+
+		/* this option eliminates the probe request when
+		   username/password are specified */
+		request.SetOption(CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
 
 		request_headers.Append(StringFormat<40>("depth: %u", depth));
 		request_headers.Append("content-type: text/xml");

@@ -438,13 +438,13 @@ CurlInputStream::CurlInputStream(EventLoop &event_loop, const char *_url,
 {
 	request_headers.Append("Icy-Metadata: 1");
 
-	for (const auto &i : headers) {
-    if (i.first.compare("ForceSeekable") == 0) {
-      seekable = true;
-      continue;
-    }
-		request_headers.Append((i.first + ":" + i.second).c_str());
-  }
+	for (const auto &[key, header] : headers) {
+    		if (key.compare("ForceSeekable") == 0) {
+			seekable = true;
+			continue;
+		}
+		request_headers.Append((key + ":" + header).c_str());
+	{
 }
 
 CurlInputStream::~CurlInputStream() noexcept
@@ -467,6 +467,10 @@ CurlInputStream::InitEasy()
 	request->SetOption(CURLOPT_FOLLOWLOCATION, 1L);
 	request->SetOption(CURLOPT_MAXREDIRS, 5L);
 	request->SetOption(CURLOPT_FAILONERROR, 1L);
+
+	/* this option eliminates the probe request when
+	   username/password are specified */
+	request->SetOption(CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
 
 	if (proxy != nullptr)
 		request->SetOption(CURLOPT_PROXY, proxy);

@@ -136,7 +136,7 @@ bool
 HttpdClient::SendResponse() noexcept
 {
 	char buffer[1024];
-	AllocatedString<> allocated = nullptr;
+	AllocatedString allocated;
 	const char *response;
 
 	assert(state == State::RESPONSE);
@@ -162,6 +162,7 @@ HttpdClient::SendResponse() noexcept
 			 "Connection: close\r\n"
 			 "Pragma: no-cache\r\n"
 			 "Cache-Control: no-cache, no-store\r\n"
+			 "Access-Control-Allow-Origin: *\r\n"
 			 "\r\n",
 			 httpd.content_type);
 		response = buffer;

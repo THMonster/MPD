@@ -78,7 +78,7 @@ private:
 };
 
 struct AvahiTimeout final {
-	TimerEvent timer;
+	TimerEvent event;
 
 	const AvahiTimeoutCallback callback;
 	void *const userdata;
@@ -87,17 +87,17 @@ public:
 	AvahiTimeout(const struct timeval *tv,
 		     AvahiTimeoutCallback _callback, void *_userdata,
 		     EventLoop &_loop)
-		:timer(_loop, BIND_THIS_METHOD(OnTimeout)),
+		:event(_loop, BIND_THIS_METHOD(OnTimeout)),
 		 callback(_callback), userdata(_userdata) {
 		if (tv != nullptr)
-			timer.Schedule(ToSteadyClockDuration(*tv));
+			Schedule(*tv);
 	}
 
 	static void TimeoutUpdate(AvahiTimeout *t, const struct timeval *tv) {
 		if (tv != nullptr)
-			t->timer.Schedule(ToSteadyClockDuration(*tv));
+			t->Schedule(*tv);
 		else
-			t->timer.Cancel();
+			t->event.Cancel();
 	}
 
 	static void TimeoutFree(AvahiTimeout *t) {
@@ -105,6 +105,30 @@ public:
 	}
 
 private:
+	[[gnu::pure]]
+	Event::Duration AbsoluteToDuration(const struct timeval &tv) noexcept {
+		if (tv.tv_sec == 0)
+			/* schedule immediately */
+			return {};
+
+		struct timeval now;
+		if (gettimeofday(&now, nullptr) < 0)
+			/* shouldn't ever fail, but if it does, do
+			   something reasonable */
+			return std::chrono::seconds(1);
+
+		auto d = ToSteadyClockDuration(tv)
+			- ToSteadyClockDuration(now);
+		if (d.count() < 0)
+			return {};
+
+		return d;
+	}
+
+	void Schedule(const struct timeval &tv) noexcept {
+		event.Schedule(AbsoluteToDuration(tv));
+	}
+
 	void OnTimeout() noexcept {
 		callback(this, userdata);
 	}

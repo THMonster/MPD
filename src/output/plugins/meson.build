@@ -136,11 +136,12 @@ endif
 output_features.set('ENABLE_WASAPI_OUTPUT', is_windows)
 if is_windows
   output_plugins_sources += [
-    'WasapiOutputPlugin.cxx',
+    'wasapi/WasapiOutputPlugin.cxx',
   ]
   wasapi_dep = [
     c_compiler.find_library('ksuser', required: true),
     c_compiler.find_library('ole32', required: true),
+    win32_dep,
   ]
 else
   wasapi_dep = dependency('', required: false)

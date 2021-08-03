@@ -715,7 +715,7 @@ A resampler using `libsamplerate <http://www.mega-nerd.com/SRC/>`_ a.k.a. Secret
    * - Name
      - Description
    * - **type**
-     - The interpolator type. See below for a list of known types.
+     - The interpolator type. Defaults to :samp:`2`. See below for a list of known types.
 
 The following converter types are provided by libsamplerate:
 
@@ -909,6 +909,10 @@ jack
 ----
 
 The jack plugin connects to a `JACK server <http://jackaudio.org/>`_.
+
+On Windows, this plugin loads :file:`libjack64.dll` at runtime.  This
+means you need to `download and install the JACK windows build
+<https://jackaudio.org/downloads/>`_.
 
 .. list-table::
    :widths: 20 80
@@ -1171,6 +1175,8 @@ The `Windows Audio Session API <https://docs.microsoft.com/en-us/windows/win32/c
      - Enumerate all devices in log while playing started. Useful for device configuration. The default value is "no".
    * - **exclusive yes|no**
      - Exclusive mode blocks all other audio source, and get best audio quality without resampling. Stopping playing release the exclusive control of the output device. The default value is "no".
+   * - **dop yes|no**
+     - Enable DSD over PCM. Require exclusive mode. The default value is "no".
 
 
 .. _filter_plugins:
