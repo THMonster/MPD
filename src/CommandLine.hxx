@@ -22,15 +22,20 @@
 
 struct ConfigData;
 
-struct options {
+struct CommandLineOptions {
 	bool kill = false;
 	bool daemon = true;
+
+#ifdef __linux__
+	bool systemd = false;
+#endif
+
 	bool log_stderr = false;
 	bool verbose = false;
 };
 
 void
-ParseCommandLine(int argc, char **argv, struct options &options,
+ParseCommandLine(int argc, char **argv, CommandLineOptions &options,
 		 ConfigData &config);
 
 #endif

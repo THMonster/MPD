@@ -20,11 +20,11 @@
 #ifndef MPD_NEIGHBOR_ALL_HXX
 #define MPD_NEIGHBOR_ALL_HXX
 
-#include "util/Compiler.h"
 #include "thread/Mutex.hxx"
 
 #include <forward_list>
 #include <memory>
+#include <string>
 
 struct ConfigData;
 class EventLoop;
@@ -37,11 +37,13 @@ struct NeighborInfo;
  */
 class NeighborGlue {
 	struct Explorer {
+		const std::string name;
 		std::unique_ptr<NeighborExplorer> explorer;
 
-		template<typename E>
-		Explorer(E &&_explorer) noexcept
-			:explorer(std::forward<E>(_explorer)) {}
+		template<typename N, typename E>
+		Explorer(N &&_name, E &&_explorer) noexcept
+			:name(std::forward<N>(_name)),
+			 explorer(std::forward<E>(_explorer)) {}
 
 		Explorer(const Explorer &) = delete;
 	};
@@ -74,7 +76,7 @@ public:
 	 * Get the combined list of all neighbors from all active
 	 * plugins.
 	 */
-	gcc_pure
+	[[gnu::pure]]
 	List GetList() const noexcept;
 };
 

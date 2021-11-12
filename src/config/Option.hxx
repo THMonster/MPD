@@ -48,6 +48,7 @@ enum class ConfigOption {
 	ZEROCONF_NAME,
 	ZEROCONF_ENABLED,
 	PASSWORD,
+	HOST_PERMISSIONS,
 	LOCAL_PERMISSIONS,
 	DEFAULT_PERMS,
 	AUDIO_OUTPUT_FORMAT,
@@ -102,14 +103,14 @@ enum class ConfigBlockOption {
 /**
  * @return #ConfigOption::MAX if not found
  */
-gcc_pure
+[[gnu::pure]]
 enum ConfigOption
 ParseConfigOptionName(const char *name) noexcept;
 
 /**
  * @return #ConfigOption::MAX if not found
  */
-gcc_pure
+[[gnu::pure]]
 enum ConfigBlockOption
 ParseConfigBlockOptionName(const char *name) noexcept;
 

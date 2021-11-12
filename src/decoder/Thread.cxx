@@ -61,7 +61,7 @@ DecoderUriDecode(const DecoderPlugin &plugin,
 	assert(uri != nullptr);
 	assert(bridge.dc.state == DecoderState::START);
 
-	FormatDebug(decoder_thread_domain, "probing plugin %s", plugin.name);
+	FmtDebug(decoder_thread_domain, "probing plugin {}", plugin.name);
 
 	if (bridge.dc.command == DecoderCommand::STOP)
 		throw StopDecoder();
@@ -99,7 +99,7 @@ decoder_stream_decode(const DecoderPlugin &plugin,
 	assert(input_stream.IsReady());
 	assert(bridge.dc.state == DecoderState::START);
 
-	FormatDebug(decoder_thread_domain, "probing plugin %s", plugin.name);
+	FmtDebug(decoder_thread_domain, "probing plugin {}", plugin.name);
 
 	if (bridge.dc.command == DecoderCommand::STOP)
 		throw StopDecoder();
@@ -142,7 +142,7 @@ decoder_file_decode(const DecoderPlugin &plugin,
 	assert(path.IsAbsolute());
 	assert(bridge.dc.state == DecoderState::START);
 
-	FormatDebug(decoder_thread_domain, "probing plugin %s", plugin.name);
+	FmtDebug(decoder_thread_domain, "probing plugin {}", plugin.name);
 
 	if (bridge.dc.command == DecoderCommand::STOP)
 		throw StopDecoder();
@@ -172,23 +172,23 @@ decoder_check_plugin_mime(const DecoderPlugin &plugin,
 
 	const char *mime_type = is.GetMimeType();
 	return mime_type != nullptr &&
-		plugin.SupportsMimeType(GetMimeTypeBase(mime_type).c_str());
+		plugin.SupportsMimeType(GetMimeTypeBase(mime_type));
 }
 
 gcc_pure
 static bool
 decoder_check_plugin_suffix(const DecoderPlugin &plugin,
-			    const char *suffix) noexcept
+			    std::string_view suffix) noexcept
 {
 	assert(plugin.stream_decode != nullptr);
 
-	return suffix != nullptr && plugin.SupportsSuffix(suffix);
+	return !suffix.empty() && plugin.SupportsSuffix(suffix);
 }
 
 gcc_pure
 static bool
 decoder_check_plugin(const DecoderPlugin &plugin, const InputStream &is,
-		     const char *suffix) noexcept
+		     std::string_view suffix) noexcept
 {
 	return plugin.stream_decode != nullptr &&
 		(decoder_check_plugin_mime(plugin, is) ||
@@ -198,7 +198,7 @@ decoder_check_plugin(const DecoderPlugin &plugin, const InputStream &is,
 static bool
 decoder_run_stream_plugin(DecoderBridge &bridge, InputStream &is,
 			  std::unique_lock<Mutex> &lock,
-			  const char *suffix,
+			  std::string_view suffix,
 			  const DecoderPlugin &plugin,
 			  bool &tried_r)
 {
@@ -216,8 +216,7 @@ decoder_run_stream_locked(DecoderBridge &bridge, InputStream &is,
 			  std::unique_lock<Mutex> &lock,
 			  const char *uri, bool &tried_r)
 {
-	UriSuffixBuffer suffix_buffer;
-	const char *const suffix = uri_get_suffix(uri, suffix_buffer);
+	const auto suffix = uri_get_suffix(uri);
 
 	const auto f = [&,suffix](const auto &plugin)
 		{ return decoder_run_stream_plugin(bridge, is, lock, suffix, plugin, tried_r); };
@@ -326,7 +325,7 @@ decoder_run_stream(DecoderBridge &bridge, const char *uri)
  * DecoderControl::mutex is not locked by caller.
  */
 static bool
-TryDecoderFile(DecoderBridge &bridge, Path path_fs, const char *suffix,
+TryDecoderFile(DecoderBridge &bridge, Path path_fs, std::string_view suffix,
 	       InputStream &input_stream,
 	       const DecoderPlugin &plugin)
 {
@@ -354,7 +353,8 @@ TryDecoderFile(DecoderBridge &bridge, Path path_fs, const char *suffix,
  * DecoderControl::mutex is not locked by caller.
  */
 static bool
-TryContainerDecoder(DecoderBridge &bridge, Path path_fs, const char *suffix,
+TryContainerDecoder(DecoderBridge &bridge, Path path_fs,
+		    std::string_view suffix,
 		    const DecoderPlugin &plugin)
 {
 	if (plugin.container_scan == nullptr ||
@@ -375,7 +375,8 @@ TryContainerDecoder(DecoderBridge &bridge, Path path_fs, const char *suffix,
  * DecoderControl::mutex is not locked by caller.
  */
 static bool
-TryContainerDecoder(DecoderBridge &bridge, Path path_fs, const char *suffix)
+TryContainerDecoder(DecoderBridge &bridge, Path path_fs,
+		    std::string_view suffix)
 {
 	return decoder_plugins_try([&bridge, path_fs,
 				    suffix](const DecoderPlugin &plugin){
@@ -394,9 +395,11 @@ TryContainerDecoder(DecoderBridge &bridge, Path path_fs, const char *suffix)
 static bool
 decoder_run_file(DecoderBridge &bridge, const char *uri_utf8, Path path_fs)
 {
-	const char *suffix = uri_get_suffix(uri_utf8);
-	if (suffix == nullptr)
+	const char *_suffix = PathTraitsUTF8::GetFilenameSuffix(uri_utf8);
+	if (_suffix == nullptr)
 		return false;
+
+	const std::string_view suffix{_suffix};
 
 	InputStreamPtr input_stream;
 

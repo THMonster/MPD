@@ -14,12 +14,14 @@ conf.set('ENABLE_ALSA', true)
 alsa = static_library(
   'alsa',
   'Version.cxx',
+  'Error.cxx',
   'AllowedFormat.cxx',
   'HwSetup.cxx',
   'NonBlock.cxx',
   include_directories: inc,
   dependencies: [
     libasound_dep,
+    log_dep,
   ],
 )
 

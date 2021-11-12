@@ -1,5 +1,5 @@
 filter_plugins_sources = []
-filter_plugins_deps = []
+filter_plugins_deps = [fmt_dep]
 
 if libavfilter_dep.found()
   filter_plugins_sources += [
@@ -15,7 +15,6 @@ filter_plugins = static_library(
   '../../AudioCompress/compress.c',
   'NullFilterPlugin.cxx',
   'TwoFilters.cxx',
-  'ChainFilterPlugin.cxx',
   'AutoConvertFilterPlugin.cxx',
   'ConvertFilterPlugin.cxx',
   'RouteFilterPlugin.cxx',
@@ -26,6 +25,7 @@ filter_plugins = static_library(
   include_directories: inc,
   dependencies: [
     filter_plugins_deps,
+    log_dep,
   ],
 )
 

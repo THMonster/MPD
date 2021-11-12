@@ -1,6 +1,7 @@
 storage_api = static_library(
   'storage_api',
   'StorageInterface.cxx',
+  'StoragePlugin.cxx',
   include_directories: inc,
 )
 
@@ -20,6 +21,7 @@ storage_glue = static_library(
   include_directories: inc,
   dependencies: [
     boost_dep,
+    log_dep,
   ],
 )
 

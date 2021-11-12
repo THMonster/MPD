@@ -31,7 +31,7 @@ struct AudioFormat;
  */
 class PcmResampler {
 public:
-	virtual ~PcmResampler() {}
+	virtual ~PcmResampler() = default;
 
 	/**
 	 * Opens the resampler, preparing it for Resample().
@@ -42,7 +42,6 @@ public:
 	 * modify the object to enforce another input format (however,
 	 * it may not request a different input sample rate)
 	 * @param new_sample_rate the requested output sample rate
-	 * @param error location to store the error
 	 * @return the format of outgoing data
 	 */
 	virtual AudioFormat Open(AudioFormat &af,

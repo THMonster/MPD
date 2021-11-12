@@ -26,7 +26,7 @@ class EventLoop;
 
 #include "util/BindMethod.hxx"
 
-typedef BoundMethod<void()> SignalHandler;
+using SignalHandler = BoundMethod<void() noexcept>;
 
 /**
  * Initialise the signal monitor subsystem.

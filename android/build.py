@@ -83,6 +83,7 @@ class AndroidNdkToolchain:
         install_prefix = os.path.join(arch_path, 'root')
 
         self.arch = arch
+        self.actual_arch = arch
         self.install_prefix = install_prefix
 
         llvm_path = os.path.join(ndk_path, 'toolchains', 'llvm', 'prebuilt', build_arch)
@@ -139,10 +140,7 @@ class AndroidNdkToolchain:
         # default one on the build host
         import shutil
         bin_dir = os.path.join(install_prefix, 'bin')
-        try:
-            os.makedirs(bin_dir)
-        except:
-            pass
+        os.makedirs(bin_dir, exist_ok=True)
         self.pkg_config = shutil.copy(os.path.join(mpd_path, 'build', 'pkg-config.sh'),
                                       os.path.join(bin_dir, 'pkg-config'))
         self.env['PKG_CONFIG'] = self.pkg_config
@@ -152,7 +150,6 @@ from build.libs import *
 thirdparty_libs = [
     libmpdclient,
     libogg,
-    libvorbis,
     opus,
     flac,
     libid3tag,
@@ -162,7 +159,6 @@ thirdparty_libs = [
     ffmpeg,
     openssl,
     curl,
-    libexpat,
     libnfs,
     boost,
 ]

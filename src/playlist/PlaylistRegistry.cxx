@@ -43,7 +43,7 @@
 #include <cassert>
 #include <iterator>
 
-const PlaylistPlugin *const playlist_plugins[] = {
+constexpr const PlaylistPlugin *playlist_plugins[] = {
 	&extm3u_playlist_plugin,
 	&m3u_playlist_plugin,
 	&pls_playlist_plugin,
@@ -157,9 +157,8 @@ playlist_list_open_uri_suffix(const char *uri, Mutex &mutex,
 {
 	assert(uri != nullptr);
 
-	UriSuffixBuffer suffix_buffer;
-	const char *const suffix = uri_get_suffix(uri, suffix_buffer);
-	if (suffix == nullptr)
+	const auto suffix = uri_get_suffix(uri);
+	if (suffix.empty())
 		return nullptr;
 
 	for (unsigned i = 0; playlist_plugins[i] != nullptr; ++i) {
@@ -216,32 +215,17 @@ playlist_list_open_stream_mime2(InputStreamPtr &&is, StringView mime)
 	return nullptr;
 }
 
-/**
- * Extract the "main" part of a MIME type string, i.e. the portion
- * before the semicolon (if one exists).
- */
-gcc_pure
-static StringView
-ExtractMimeTypeMainPart(StringView s) noexcept
-{
-	return s.Split(';').first;
-}
-
 static std::unique_ptr<SongEnumerator>
-playlist_list_open_stream_mime(InputStreamPtr &&is, const char *full_mime)
+playlist_list_open_stream_mime(InputStreamPtr &&is, std::string_view mime)
 {
-	assert(full_mime != nullptr);
-
 	/* probe only the portion before the semicolon*/
 	return playlist_list_open_stream_mime2(std::move(is),
-					       ExtractMimeTypeMainPart(full_mime));
+					       mime);
 }
 
 std::unique_ptr<SongEnumerator>
-playlist_list_open_stream_suffix(InputStreamPtr &&is, const char *suffix)
+playlist_list_open_stream_suffix(InputStreamPtr &&is, std::string_view suffix)
 {
-	assert(suffix != nullptr);
-
 	playlist_plugins_for_each_enabled(plugin) {
 		if (plugin->open_stream != nullptr &&
 		    plugin->SupportsSuffix(suffix)) {
@@ -269,30 +253,27 @@ playlist_list_open_stream(InputStreamPtr &&is, const char *uri)
 	const char *const mime = is->GetMimeType();
 	if (mime != nullptr) {
 		auto playlist = playlist_list_open_stream_mime(std::move(is),
-							       GetMimeTypeBase(mime).c_str());
+							       GetMimeTypeBase(mime));
 		if (playlist != nullptr)
 			return playlist;
 	}
 
-	UriSuffixBuffer suffix_buffer;
-	const char *suffix = uri != nullptr
-		? uri_get_suffix(uri, suffix_buffer)
-		: nullptr;
-	if (suffix != nullptr) {
-		auto playlist = playlist_list_open_stream_suffix(std::move(is),
-								 suffix);
-		if (playlist != nullptr)
-			return playlist;
+	if (uri != nullptr) {
+		const auto suffix = uri_get_suffix(uri);
+		if (!suffix.empty()) {
+			auto playlist = playlist_list_open_stream_suffix(std::move(is),
+									 suffix);
+			if (playlist != nullptr)
+				return playlist;
+		}
 	}
 
 	return nullptr;
 }
 
 const PlaylistPlugin *
-FindPlaylistPluginBySuffix(const char *suffix) noexcept
+FindPlaylistPluginBySuffix(std::string_view suffix) noexcept
 {
-	assert(suffix != nullptr);
-
 	playlist_plugins_for_each_enabled(plugin) {
 		if (plugin->SupportsSuffix(suffix))
 			return plugin;

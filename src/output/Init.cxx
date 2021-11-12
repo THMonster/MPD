@@ -22,6 +22,7 @@
 #include "Domain.hxx"
 #include "OutputAPI.hxx"
 #include "Defaults.hxx"
+#include "lib/fmt/ExceptionFormatter.hxx"
 #include "pcm/AudioParser.hxx"
 #include "mixer/MixerList.hxx"
 #include "mixer/MixerType.hxx"
@@ -31,7 +32,7 @@
 #include "filter/plugins/AutoConvertFilterPlugin.hxx"
 #include "filter/plugins/ConvertFilterPlugin.hxx"
 #include "filter/plugins/ReplayGainFilterPlugin.hxx"
-#include "filter/plugins/ChainFilterPlugin.hxx"
+#include "filter/plugins/TwoFilters.hxx"
 #include "filter/plugins/VolumeFilterPlugin.hxx"
 #include "filter/plugins/NormalizeFilterPlugin.hxx"
 #include "util/RuntimeError.hxx"
@@ -68,9 +69,9 @@ audio_output_detect()
 		if (plugin->test_default_device == nullptr)
 			continue;
 
-		FormatInfo(output_domain,
-			   "Attempting to detect a %s audio device",
-			   plugin->name);
+		FmtInfo(output_domain,
+			"Attempting to detect a {} audio device",
+			plugin->name);
 		if (ao_plugin_test_default_device(plugin))
 			return plugin;
 	}
@@ -108,7 +109,7 @@ audio_output_load_mixer(EventLoop &event_loop, FilteredAudioOutput &ao,
 			const ConfigBlock &block,
 			const MixerType mixer_type,
 			const MixerPlugin *plugin,
-			PreparedFilter &filter_chain,
+			std::unique_ptr<PreparedFilter> &filter_chain,
 			MixerListener &listener)
 {
 	Mixer *mixer;
@@ -136,8 +137,9 @@ audio_output_load_mixer(EventLoop &event_loop, FilteredAudioOutput &ao,
 				  ConfigBlock());
 		assert(mixer != nullptr);
 
-		filter_chain_append(filter_chain, "software_mixer",
-				    ao.volume_filter.Set(volume_filter_prepare()));
+		filter_chain = ChainFilters(std::move(filter_chain),
+					    ao.volume_filter.Set(volume_filter_prepare()),
+					    "software_mixer");
 		return mixer;
 	}
 
@@ -168,29 +170,25 @@ FilteredAudioOutput::Configure(const ConfigBlock &block,
 
 	log_name = StringFormat<256>("\"%s\" (%s)", name, plugin_name);
 
-	/* set up the filter chain */
-
-	prepared_filter = filter_chain_new();
-	assert(prepared_filter != nullptr);
-
 	/* create the normalization filter (if configured) */
 
 	if (defaults.normalize) {
-		filter_chain_append(*prepared_filter, "normalize",
-				    autoconvert_filter_new(normalize_filter_prepare()));
+		prepared_filter = ChainFilters(std::move(prepared_filter),
+					       autoconvert_filter_new(normalize_filter_prepare()),
+					       "normalize");
 	}
 
 	try {
 		if (filter_factory != nullptr)
-			filter_chain_parse(*prepared_filter, *filter_factory,
+			filter_chain_parse(prepared_filter, *filter_factory,
 					   block.GetBlockValue(AUDIO_FILTERS, ""));
 	} catch (...) {
 		/* It's not really fatal - Part of the filter chain
 		   has been set up already and even an empty one will
 		   work (if only with unexpected behaviour) */
-		FormatError(std::current_exception(),
-			    "Failed to initialize filter chain for '%s'",
-			    name);
+		FmtError(output_domain,
+			 "Failed to initialize filter chain for '{}': {}",
+			 name, std::current_exception());
 	}
 }
 
@@ -235,12 +233,12 @@ FilteredAudioOutput::Setup(EventLoop &event_loop,
 		mixer = audio_output_load_mixer(event_loop, *this, block,
 						mixer_type,
 						mixer_plugin,
-						*prepared_filter,
+						prepared_filter,
 						mixer_listener);
 	} catch (...) {
-		FormatError(std::current_exception(),
-			    "Failed to initialize hardware mixer for '%s'",
-			    name);
+		FmtError(output_domain,
+			 "Failed to initialize hardware mixer for '{}': {}",
+			 name, std::current_exception());
 	}
 
 	/* use the hardware mixer for replay gain? */
@@ -250,8 +248,8 @@ FilteredAudioOutput::Setup(EventLoop &event_loop,
 			replay_gain_filter_set_mixer(*prepared_replay_gain_filter,
 						     mixer, 100);
 		else
-			FormatError(output_domain,
-				    "No such mixer for output '%s'", name);
+			FmtError(output_domain,
+				 "No such mixer for output '{}'", name);
 	} else if (!StringIsEqual(replay_gain_handler, "software") &&
 		   prepared_replay_gain_filter != nullptr) {
 		throw std::runtime_error("Invalid \"replay_gain_handler\" value");
@@ -259,12 +257,13 @@ FilteredAudioOutput::Setup(EventLoop &event_loop,
 
 	/* the "convert" filter must be the last one in the chain */
 
-	filter_chain_append(*prepared_filter, "convert",
-			    convert_filter.Set(convert_filter_prepare()));
+	prepared_filter = ChainFilters(std::move(prepared_filter),
+				       convert_filter.Set(convert_filter_prepare()),
+				       "convert");
 }
 
 std::unique_ptr<FilteredAudioOutput>
-audio_output_new(EventLoop &event_loop,
+audio_output_new(EventLoop &normal_event_loop, EventLoop &rt_event_loop,
 		 const ReplayGainConfig &replay_gain_config,
 		 const ConfigBlock &block,
 		 const AudioOutputDefaults &defaults,
@@ -289,10 +288,18 @@ audio_output_new(EventLoop &event_loop,
 
 		plugin = audio_output_detect();
 
-		FormatNotice(output_domain,
-			     "Successfully detected a %s audio device",
-			     plugin->name);
+		FmtNotice(output_domain,
+			  "Successfully detected a {} audio device",
+			  plugin->name);
 	}
+
+	/* use the real-time I/O thread only for the ALSA plugin;
+	   other plugins like httpd don't need real-time so badly,
+	   because they have larger buffers */
+	// TODO: don't hard-code the plugin name
+	auto &event_loop = StringIsEqual(plugin->name, "alsa")
+		? rt_event_loop
+		: normal_event_loop;
 
 	std::unique_ptr<AudioOutput> ao(ao_plugin_init(event_loop, *plugin,
 						       block));

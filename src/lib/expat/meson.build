@@ -1,4 +1,6 @@
-expat_dep = dependency('expat', required: get_option('expat'))
+expat_dep = dependency('expat',
+                       fallback: ['expat', 'expat_dep'],
+                       required: get_option('expat'))
 conf.set('ENABLE_EXPAT', expat_dep.found())
 if not expat_dep.found()
   subdir_done()
@@ -16,4 +18,7 @@ expat = static_library(
 
 expat_dep = declare_dependency(
   link_with: expat,
+  dependencies: [
+    expat_dep,
+  ]
 )

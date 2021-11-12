@@ -33,7 +33,6 @@
 #include "storage/FileInfo.hxx"
 #include "input/InputStream.hxx"
 #include "input/Error.hxx"
-#include "util/Alloc.hxx"
 #include "util/StringCompare.hxx"
 #include "util/UriExtract.hxx"
 #include "Log.hxx"
@@ -133,28 +132,6 @@ UpdateWalk::PurgeDeletedFromDirectory(Directory &directory) noexcept
 	}
 }
 
-void
-UpdateWalk::PurgeDanglingFromPlaylists(Directory &directory) noexcept
-{
-	/* recurse */
-	for (Directory &child : directory.children)
-		PurgeDanglingFromPlaylists(child);
-
-	if (!directory.IsPlaylist())
-		/* this check is only for virtual directories
-		   representing a playlist file */
-		return;
-
-	directory.ForEachSongSafe([&](Song &song){
-		if (!song.target.empty() &&
-		    !PathTraitsUTF8::IsAbsoluteOrHasScheme(song.target.c_str()) &&
-		    !directory.TargetExists(song.target)) {
-			editor.DeleteSong(directory, &song);
-			modified = true;
-		}
-	});
-}
-
 #ifndef _WIN32
 static bool
 update_directory_stat(Storage &storage, Directory &directory) noexcept
@@ -211,7 +188,7 @@ UpdateWalk::UpdateRegularFile(Directory &directory,
 			      const char *name,
 			      const StorageFileInfo &info) noexcept
 {
-	const char *suffix = uri_get_suffix(name);
+	const char *suffix = PathTraitsUTF8::GetFilenameSuffix(name);
 	if (suffix == nullptr)
 		return false;
 
@@ -245,8 +222,8 @@ try {
 		if (!UpdateDirectory(*subdir, exclude_list, info))
 			editor.LockDeleteDirectory(subdir);
 	} else {
-		FormatDebug(update_domain,
-			    "%s is not a directory, archive or music", name);
+		FmtDebug(update_domain,
+			 "{} is not a directory, archive or music", name);
 	}
 } catch (...) {
 	LogError(std::current_exception());
@@ -542,8 +519,8 @@ UpdateWalk::Walk(Directory &root, const char *path, bool discard) noexcept
 			return false;
 
 		if (!info.IsDirectory()) {
-			FormatError(update_domain, "Not a directory: %s",
-				    storage.MapUTF8("").c_str());
+			FmtError(update_domain, "Not a directory: {}",
+				 storage.MapUTF8(""));
 			return false;
 		}
 

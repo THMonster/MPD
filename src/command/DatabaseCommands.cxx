@@ -19,6 +19,7 @@
 
 #include "DatabaseCommands.hxx"
 #include "Request.hxx"
+#include "Partition.hxx"
 #include "db/DatabaseQueue.hxx"
 #include "db/DatabasePlaylist.hxx"
 #include "db/DatabasePrint.hxx"
@@ -33,6 +34,8 @@
 #include "util/StringAPI.hxx"
 #include "util/ASCII.hxx"
 #include "song/Filter.hxx"
+
+#include <fmt/format.h>
 
 #include <memory>
 #include <vector>
@@ -66,6 +69,21 @@ ParseSortTag(const char *s)
 		throw ProtocolError(ACK_ERROR_ARG, "Unknown sort tag");
 
 	return tag;
+}
+
+static unsigned
+ParseQueuePosition(Request &args, unsigned queue_length)
+{
+	if (args.size >= 2 && StringIsEqual(args[args.size - 2], "position")) {
+		unsigned position = args.ParseUnsigned(args.size - 1,
+						       queue_length);
+		args.pop_back();
+		args.pop_back();
+		return position;
+	}
+
+	/* append to the end of the queue by default */
+	return queue_length;
 }
 
 /**
@@ -140,11 +158,27 @@ handle_search(Client &client, Request args, Response &r)
 static CommandResult
 handle_match_add(Client &client, Request args, bool fold_case)
 {
+	auto &partition = client.GetPartition();
+	const auto queue_length = partition.playlist.queue.GetLength();
+	const unsigned position = ParseQueuePosition(args, queue_length);
+
 	SongFilter filter;
 	const auto selection = ParseDatabaseSelection(args, fold_case, filter);
 
-	auto &partition = client.GetPartition();
 	AddFromDatabase(partition, selection);
+
+	if (position < queue_length) {
+		const auto new_queue_length =
+			partition.playlist.queue.GetLength();
+		const RangeArg range{queue_length, new_queue_length};
+
+		try {
+			partition.MoveRange(range, position);
+		} catch (...) {
+			/* ignore - shall we handle it? */
+		}
+	}
+
 	return CommandResult::OK;
 }
 
@@ -165,13 +199,20 @@ handle_searchaddpl(Client &client, Request args, Response &)
 {
 	const char *playlist = args.shift();
 
+	const unsigned position = ParseQueuePosition(args, UINT_MAX);
+
 	SongFilter filter;
 	const auto selection = ParseDatabaseSelection(args, true, filter);
 
 	const Database &db = client.GetDatabaseOrThrow();
 
-	search_add_to_playlist(db, client.GetStorage(),
-			       playlist, selection);
+	if (position == UINT_MAX)
+		search_add_to_playlist(db, client.GetStorage(),
+				       playlist, selection);
+	else
+		SearchInsertIntoPlaylist(db, client.GetStorage(), selection,
+					 playlist, position);
+
 	return CommandResult::OK;
 }
 
@@ -183,8 +224,8 @@ handle_count(Client &client, Request args, Response &r)
 		const char *s = args[args.size - 1];
 		group = tag_name_parse_i(s);
 		if (group == TAG_NUM_OF_ITEM_TYPES) {
-			r.FormatError(ACK_ERROR_ARG,
-				      "Unknown tag type: %s", s);
+			r.FmtError(ACK_ERROR_ARG,
+				   FMT_STRING("Unknown tag type: {}"), s);
 			return CommandResult::ERROR;
 		}
 
@@ -252,8 +293,8 @@ handle_list(Client &client, Request args, Response &r)
 
 	const auto tagType = tag_name_parse_i(tag_name);
 	if (tagType == TAG_NUM_OF_ITEM_TYPES) {
-		r.FormatError(ACK_ERROR_ARG,
-			      "Unknown tag type: %s", tag_name);
+		r.FmtError(ACK_ERROR_ARG,
+			   FMT_STRING("Unknown tag type: {}"), tag_name);
 		return CommandResult::ERROR;
 	}
 
@@ -266,9 +307,9 @@ handle_list(Client &client, Request args, Response &r)
 	    args.front()[0] != '(') {
 		/* for compatibility with < 0.12.0 */
 		if (tagType != TAG_ALBUM) {
-			r.FormatError(ACK_ERROR_ARG,
-				      "should be \"%s\" for 3 arguments",
-				      tag_item_names[TAG_ALBUM]);
+			r.FmtError(ACK_ERROR_ARG,
+				   FMT_STRING("should be \"{}\" for 3 arguments"),
+				   tag_item_names[TAG_ALBUM]);
 			return CommandResult::ERROR;
 		}
 
@@ -281,8 +322,8 @@ handle_list(Client &client, Request args, Response &r)
 		const char *s = args[args.size - 1];
 		const auto group = tag_name_parse_i(s);
 		if (group == TAG_NUM_OF_ITEM_TYPES) {
-			r.FormatError(ACK_ERROR_ARG,
-				      "Unknown tag type: %s", s);
+			r.FmtError(ACK_ERROR_ARG,
+				   FMT_STRING("Unknown tag type: {}"), s);
 			return CommandResult::ERROR;
 		}
 

@@ -30,8 +30,6 @@
 #ifndef SYSTEM_ERROR_HXX
 #define SYSTEM_ERROR_HXX
 
-#include "util/Compiler.h"
-
 #include <system_error> // IWYU pragma: export
 #include <utility>
 
@@ -162,7 +160,7 @@ FormatFileNotFound(const char *fmt, Args&&... args) noexcept
 #endif
 }
 
-gcc_pure
+[[gnu::pure]]
 inline bool
 IsErrno(const std::system_error &e, int code) noexcept
 {
@@ -170,7 +168,7 @@ IsErrno(const std::system_error &e, int code) noexcept
 		e.code().value() == code;
 }
 
-gcc_pure
+[[gnu::pure]]
 static inline bool
 IsFileNotFound(const std::system_error &e) noexcept
 {
@@ -182,7 +180,7 @@ IsFileNotFound(const std::system_error &e) noexcept
 #endif
 }
 
-gcc_pure
+[[gnu::pure]]
 static inline bool
 IsPathNotFound(const std::system_error &e) noexcept
 {
@@ -194,7 +192,7 @@ IsPathNotFound(const std::system_error &e) noexcept
 #endif
 }
 
-gcc_pure
+[[gnu::pure]]
 static inline bool
 IsAccessDenied(const std::system_error &e) noexcept
 {

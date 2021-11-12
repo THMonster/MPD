@@ -22,6 +22,7 @@
 #include "db/DatabaseLock.hxx"
 #include "db/PlaylistVector.hxx"
 #include "db/plugins/simple/Directory.hxx"
+#include "lib/fmt/ExceptionFormatter.hxx"
 #include "song/DetachedSong.hxx"
 #include "input/InputStream.hxx"
 #include "playlist/PlaylistPlugin.hxx"
@@ -34,7 +35,38 @@
 #include "util/StringFormat.hxx"
 #include "Log.hxx"
 
-void
+inline void
+UpdateWalk::UpdatePlaylistFile(Directory &directory,
+			       SongEnumerator &contents) noexcept
+{
+	unsigned track = 0;
+
+	while (true) {
+		auto song = contents.NextSong();
+		if (!song)
+			break;
+
+		auto db_song = std::make_unique<Song>(std::move(*song),
+						      directory);
+		const bool is_absolute =
+			PathTraitsUTF8::IsAbsoluteOrHasScheme(db_song->filename.c_str());
+		db_song->target = is_absolute
+			? db_song->filename
+			/* prepend "../" to relative paths to go from
+			   the virtual directory (DEVICE_PLAYLIST) to
+			   the containing directory */
+			: "../" + db_song->filename;
+		db_song->filename = StringFormat<64>("track%04u",
+						     ++track);
+
+		{
+			const ScopeDatabaseLock protect;
+			directory.AddSong(std::move(db_song));
+		}
+	}
+}
+
+inline void
 UpdateWalk::UpdatePlaylistFile(Directory &parent, std::string_view name,
 			       const StorageFileInfo &info,
 			       const PlaylistPlugin &plugin) noexcept
@@ -50,7 +82,7 @@ UpdateWalk::UpdatePlaylistFile(Directory &parent, std::string_view name,
 
 	const auto uri_utf8 = storage.MapUTF8(directory->GetPath());
 
-	FormatDebug(update_domain, "scanning playlist '%s'", uri_utf8.c_str());
+	FmtDebug(update_domain, "scanning playlist '{}'", uri_utf8);
 
 	try {
 		Mutex mutex;
@@ -62,41 +94,21 @@ UpdateWalk::UpdatePlaylistFile(Directory &parent, std::string_view name,
 			return;
 		}
 
-		unsigned track = 0;
+		UpdatePlaylistFile(*directory, *e);
 
-		while (true) {
-			auto song = e->NextSong();
-			if (!song)
-				break;
-
-			auto db_song = std::make_unique<Song>(std::move(*song),
-							      *directory);
-			db_song->target =
-				PathTraitsUTF8::IsAbsoluteOrHasScheme(db_song->filename.c_str())
-				? db_song->filename
-				/* prepend "../" to relative paths to
-				   go from the virtual directory
-				   (DEVICE_PLAYLIST) to the containing
-				   directory */
-				: "../" + db_song->filename;
-			db_song->filename = StringFormat<64>("track%04u",
-							     ++track);
-
-			{
-				const ScopeDatabaseLock protect;
-				directory->AddSong(std::move(db_song));
-			}
-		}
+		if (directory->IsEmpty())
+			editor.LockDeleteDirectory(directory);
 	} catch (...) {
-		FormatError(std::current_exception(),
-			    "Failed to scan playlist '%s'", uri_utf8.c_str());
+		FmtError(update_domain,
+			 "Failed to scan playlist '{}': {}",
+			 uri_utf8, std::current_exception());
 		editor.LockDeleteDirectory(directory);
 	}
 }
 
 bool
 UpdateWalk::UpdatePlaylistFile(Directory &directory,
-			       std::string_view name, const char *suffix,
+			       std::string_view name, std::string_view suffix,
 			       const StorageFileInfo &info) noexcept
 {
 	const auto *const plugin = FindPlaylistPluginBySuffix(suffix);
@@ -113,4 +125,34 @@ UpdateWalk::UpdatePlaylistFile(Directory &directory,
 		modified = true;
 
 	return true;
+}
+
+void
+UpdateWalk::PurgeDanglingFromPlaylists(Directory &directory) noexcept
+{
+	/* recurse */
+	for (Directory &child : directory.children)
+		PurgeDanglingFromPlaylists(child);
+
+	if (!directory.IsPlaylist())
+		/* this check is only for virtual directories
+		   representing a playlist file */
+		return;
+
+	directory.ForEachSongSafe([&](Song &song){
+		if (!song.target.empty() &&
+		    !PathTraitsUTF8::IsAbsoluteOrHasScheme(song.target.c_str())) {
+			Song *target = directory.LookupTargetSong(song.target.c_str());
+			if (target == nullptr) {
+				/* the target does not exist: remove
+				   the virtual song */
+				editor.DeleteSong(directory, &song);
+				modified = true;
+			} else {
+				/* the target exists: mark it (for
+				   option "hide_playlist_targets") */
+				target->in_playlist = true;
+			}
+		}
+	});
 }

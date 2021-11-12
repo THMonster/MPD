@@ -24,7 +24,6 @@
 #include "Chrono.hxx"
 #include "tag/Tag.hxx"
 #include "pcm/AudioFormat.hxx"
-#include "util/Compiler.h"
 #include "config.h"
 
 #include <boost/intrusive/list.hpp>
@@ -57,12 +56,26 @@ struct Song {
 	 */
 	Hook siblings;
 
-	Tag tag;
-
 	/**
 	 * The #Directory that contains this song.
 	 */
 	Directory &parent;
+
+	/**
+	 * The file name.
+	 */
+	std::string filename;
+
+	/**
+	 * If non-empty, then this object does not describe a file
+	 * within the `music_directory`, but some sort of symbolic
+	 * link pointing to this value.  It can be an absolute URI
+	 * (i.e. with URI scheme) or a URI relative to this object
+	 * (which may begin with one or more "../").
+	 */
+	std::string target;
+
+	Tag tag;
 
 	/**
 	 * The time stamp of the last file modification.  A negative
@@ -89,18 +102,10 @@ struct Song {
 	AudioFormat audio_format = AudioFormat::Undefined();
 
 	/**
-	 * The file name.
+	 * Is this song referenced by at least one playlist file that
+	 * is part of the database?
 	 */
-	std::string filename;
-
-	/**
-	 * If non-empty, then this object does not describe a file
-	 * within the `music_directory`, but some sort of symbolic
-	 * link pointing to this value.  It can be an absolute URI
-	 * (i.e. with URI scheme) or a URI relative to this object
-	 * (which may begin with one or more "../").
-	 */
-	std::string target;
+	bool in_playlist = false;
 
 	template<typename F>
 	Song(F &&_filename, Directory &_parent) noexcept
@@ -108,14 +113,14 @@ struct Song {
 
 	Song(DetachedSong &&other, Directory &_parent) noexcept;
 
-	gcc_pure
+	[[gnu::pure]]
 	const char *GetFilenameSuffix() const noexcept;
 
 	/**
 	 * Checks whether the decoder plugin for this song is
 	 * available.
 	 */
-	gcc_pure
+	[[gnu::pure]]
 	bool IsPluginAvailable() const noexcept;
 
 	/**
@@ -149,10 +154,10 @@ struct Song {
 	 * Returns the URI of the song in UTF-8 encoding, including its
 	 * location within the music directory.
 	 */
-	gcc_pure
+	[[gnu::pure]]
 	std::string GetURI() const noexcept;
 
-	gcc_pure
+	[[gnu::pure]]
 	ExportedSong Export() const noexcept;
 };
 

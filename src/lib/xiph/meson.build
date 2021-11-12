@@ -5,7 +5,9 @@ if get_option('tremor').enabled()
   # no libvorbis if Tremor was explicitly enabled
   libvorbis_dep = dependency('', required: false)
 else
-  libvorbis_dep = dependency('vorbis', required: get_option('vorbis'))
+  libvorbis_dep = dependency('vorbis',
+                             fallback: ['vorbis', 'vorbis_dep'],
+                             required: get_option('vorbis'))
 endif
 
 if libvorbis_dep.found()
@@ -72,7 +74,6 @@ if libogg_dep.found()
   ogg = static_library(
     'ogg',
     'OggVisitor.cxx',
-    'OggSerial.cxx',
     'OggSyncState.cxx',
     'OggFind.cxx',
     'OggPacket.cxx',
@@ -125,6 +126,7 @@ if libflac_dep.found()
     include_directories: inc,
     dependencies: [
       libflac_dep,
+      log_dep,
     ],
   )
 

@@ -38,13 +38,14 @@ class UpnpNeighborExplorer final
 			:name(std::move(_name)), comment(std::move(_comment)),
 			 alive(true) {}
 		Server(const Server &) = delete;
+		Server &operator=(const Server &) = delete;
 
-		gcc_pure
+		[[gnu::pure]]
 		bool operator==(const Server &other) const noexcept {
 			return name == other.name;
 		}
 
-		[[nodiscard]] gcc_pure
+		[[nodiscard]] [[gnu::pure]]
 		NeighborInfo Export() const noexcept {
 			return { "smb://" + name + "/", comment };
 		}
@@ -73,7 +74,7 @@ private:
 void
 UpnpNeighborExplorer::Open()
 {
-	auto handle = UpnpClientGlobalInit();
+	auto handle = UpnpClientGlobalInit(nullptr);
 
 	discovery = new UPnPDeviceDirectory(event_loop, handle, this);
 

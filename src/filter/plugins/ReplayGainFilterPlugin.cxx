@@ -27,6 +27,7 @@
 #include "pcm/Volume.hxx"
 #include "util/ConstBuffer.hxx"
 #include "util/Domain.hxx"
+#include "Idle.hxx"
 #include "Log.hxx"
 
 #include <cassert>
@@ -94,9 +95,9 @@ public:
 			/* no change */
 			return;
 
-		FormatDebug(replay_gain_domain,
-			    "replay gain mode has changed %s->%s\n",
-			    ToString(mode), ToString(_mode));
+		FmtDebug(replay_gain_domain,
+			 "replay gain mode has changed {}->{}",
+			 ToString(mode), ToString(_mode));
 
 		mode = _mode;
 		Update();
@@ -155,8 +156,7 @@ ReplayGainFilter::Update()
 	if (mode != ReplayGainMode::OFF) {
 		const auto &tuple = info.Get(mode);
 		float scale = tuple.CalculateScale(config);
-		FormatDebug(replay_gain_domain,
-			    "scale=%f\n", (double)scale);
+		FmtDebug(replay_gain_domain, "scale={}\n", scale);
 
 		volume = pcm_float_to_volume(scale);
 	}
@@ -170,6 +170,10 @@ ReplayGainFilter::Update()
 
 		try {
 			mixer_set_volume(mixer, _volume);
+
+			/* TODO: emit this idle event only for the
+			   current partition */
+			idle_add(IDLE_MIXER);
 		} catch (...) {
 			LogError(std::current_exception(),
 				 "Failed to update hardware mixer");

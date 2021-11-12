@@ -26,6 +26,7 @@
 
 #include "AlsaInputPlugin.hxx"
 #include "lib/alsa/NonBlock.hxx"
+#include "lib/alsa/Error.hxx"
 #include "lib/alsa/Format.hxx"
 #include "../InputPlugin.hxx"
 #include "../AsyncInputStream.hxx"
@@ -39,7 +40,7 @@
 #include "pcm/AudioFormat.hxx"
 #include "Log.hxx"
 #include "event/MultiSocketMonitor.hxx"
-#include "event/DeferEvent.hxx"
+#include "event/InjectEvent.hxx"
 
 #include <alsa/asoundlib.h>
 
@@ -80,7 +81,7 @@ class AlsaInputStream final
 
 	AlsaNonBlockPcm non_block;
 
-	DeferEvent defer_invalidate_sockets;
+	InjectEvent defer_invalidate_sockets;
 
 public:
 
@@ -98,6 +99,9 @@ public:
 
 		snd_pcm_close(capture_handle);
 	}
+
+	AlsaInputStream(const AlsaInputStream &) = delete;
+	AlsaInputStream &operator=(const AlsaInputStream &) = delete;
 
 	static InputStreamPtr Create(EventLoop &event_loop, const char *uri,
 				     Mutex &mutex);
@@ -267,15 +271,15 @@ AlsaInputStream::Recover(int err)
 {
 	switch(err) {
 	case -EPIPE:
-		FormatDebug(alsa_input_domain,
-			    "Overrun on ALSA capture device \"%s\"",
-			    device.c_str());
+		FmtDebug(alsa_input_domain,
+			 "Overrun on ALSA capture device \"{}\"",
+			 device);
 		break;
 
 	case -ESTRPIPE:
-		FormatDebug(alsa_input_domain,
-			    "ALSA capture device \"%s\" was suspended",
-			    device.c_str());
+		FmtDebug(alsa_input_domain,
+			 "ALSA capture device \"{}\" was suspended",
+			 device);
 		break;
 	}
 
@@ -329,28 +333,23 @@ AlsaInputStream::ConfigureCapture(AudioFormat audio_format)
 	snd_pcm_hw_params_alloca(&hw_params);
 
 	if ((err = snd_pcm_hw_params_any(capture_handle, hw_params)) < 0)
-		throw FormatRuntimeError("Cannot initialize hardware parameter structure (%s)",
-					 snd_strerror(err));
+		throw Alsa::MakeError(err, "snd_pcm_hw_params_any() failed");
 
 	if ((err = snd_pcm_hw_params_set_access(capture_handle, hw_params,
 	                                       SND_PCM_ACCESS_RW_INTERLEAVED)) < 0)
-		throw FormatRuntimeError("Cannot set access type (%s)",
-					 snd_strerror(err));
+		throw Alsa::MakeError(err, "snd_pcm_hw_params_set_access() failed");
 
 	if ((err = snd_pcm_hw_params_set_format(capture_handle, hw_params,
 	                               	ToAlsaPcmFormat(audio_format.format))) < 0)
-		throw FormatRuntimeError("Cannot set sample format (%s)",
-					 snd_strerror(err));
+		throw Alsa::MakeError(err, "Cannot set sample format");
 
 	if ((err = snd_pcm_hw_params_set_channels(capture_handle,
 	                                    hw_params, audio_format.channels)) < 0)
-		throw FormatRuntimeError("Cannot set channels (%s)",
-					 snd_strerror(err));
+		throw Alsa::MakeError(err, "Cannot set channels");
 
 	if ((err = snd_pcm_hw_params_set_rate(capture_handle,
 	                              hw_params, audio_format.sample_rate, 0)) < 0)
-		throw FormatRuntimeError("Cannot set sample rate (%s)",
-					 snd_strerror(err));
+		throw Alsa::MakeError(err, "Cannot set sample rate");
 
 	snd_pcm_uframes_t buffer_size_min, buffer_size_max;
 	snd_pcm_hw_params_get_buffer_size_min(hw_params, &buffer_size_min);
@@ -358,9 +357,9 @@ AlsaInputStream::ConfigureCapture(AudioFormat audio_format)
 	unsigned buffer_time_min, buffer_time_max;
 	snd_pcm_hw_params_get_buffer_time_min(hw_params, &buffer_time_min, nullptr);
 	snd_pcm_hw_params_get_buffer_time_max(hw_params, &buffer_time_max, nullptr);
-	FormatDebug(alsa_input_domain, "buffer: size=%u..%u time=%u..%u",
-		    (unsigned)buffer_size_min, (unsigned)buffer_size_max,
-		    buffer_time_min, buffer_time_max);
+	FmtDebug(alsa_input_domain, "buffer: size={}..{} time={}..{}",
+		 buffer_size_min, buffer_size_max,
+		 buffer_time_min, buffer_time_max);
 
 	snd_pcm_uframes_t period_size_min, period_size_max;
 	snd_pcm_hw_params_get_period_size_min(hw_params, &period_size_min, nullptr);
@@ -368,9 +367,9 @@ AlsaInputStream::ConfigureCapture(AudioFormat audio_format)
 	unsigned period_time_min, period_time_max;
 	snd_pcm_hw_params_get_period_time_min(hw_params, &period_time_min, nullptr);
 	snd_pcm_hw_params_get_period_time_max(hw_params, &period_time_max, nullptr);
-	FormatDebug(alsa_input_domain, "period: size=%u..%u time=%u..%u",
-		    (unsigned)period_size_min, (unsigned)period_size_max,
-		    period_time_min, period_time_max);
+	FmtDebug(alsa_input_domain, "period: size={}..{} time={}..{}",
+		 period_size_min, period_size_max,
+		 period_time_min, period_time_max);
 
 	/* choose the maximum possible buffer_size ... */
 	snd_pcm_hw_params_set_buffer_size(capture_handle, hw_params,
@@ -385,29 +384,25 @@ AlsaInputStream::ConfigureCapture(AudioFormat audio_format)
 		int direction = -1;
 		if ((err = snd_pcm_hw_params_set_period_size_near(capture_handle,
 		                             hw_params, &period_size, &direction)) < 0)
-			throw FormatRuntimeError("Cannot set period size (%s)",
-						 snd_strerror(err));
+			throw Alsa::MakeError(err, "Cannot set period size");
 	}
 
 	if ((err = snd_pcm_hw_params(capture_handle, hw_params)) < 0)
-		throw FormatRuntimeError("Cannot set parameters (%s)",
-					 snd_strerror(err));
+		throw Alsa::MakeError(err, "snd_pcm_hw_params() failed");
 
 	snd_pcm_uframes_t alsa_buffer_size;
 	err = snd_pcm_hw_params_get_buffer_size(hw_params, &alsa_buffer_size);
 	if (err < 0)
-		throw FormatRuntimeError("snd_pcm_hw_params_get_buffer_size() failed: %s",
-					 snd_strerror(-err));
+		throw Alsa::MakeError(err, "snd_pcm_hw_params_get_buffer_size() failed");
 
 	snd_pcm_uframes_t alsa_period_size;
 	err = snd_pcm_hw_params_get_period_size(hw_params, &alsa_period_size,
 						nullptr);
 	if (err < 0)
-		throw FormatRuntimeError("snd_pcm_hw_params_get_period_size() failed: %s",
-					 snd_strerror(-err));
+		throw Alsa::MakeError(err, "snd_pcm_hw_params_get_period_size() failed");
 
-	FormatDebug(alsa_input_domain, "buffer_size=%u period_size=%u",
-		    (unsigned)alsa_buffer_size, (unsigned)alsa_period_size);
+	FmtDebug(alsa_input_domain, "buffer_size={} period_size={}",
+		 alsa_buffer_size, alsa_period_size);
 
 	snd_pcm_sw_params_t *sw_params;
 	snd_pcm_sw_params_alloca(&sw_params);
@@ -415,8 +410,7 @@ AlsaInputStream::ConfigureCapture(AudioFormat audio_format)
 	snd_pcm_sw_params_current(capture_handle, sw_params);
 
 	if ((err = snd_pcm_sw_params(capture_handle, sw_params)) < 0)
-		throw FormatRuntimeError("unable to install sw params (%s)",
-					 snd_strerror(err));
+		throw Alsa::MakeError(err, "snd_pcm_sw_params() failed");
 }
 
 inline void
@@ -427,8 +421,9 @@ AlsaInputStream::OpenDevice(const SourceSpec &spec)
 	if ((err = snd_pcm_open(&capture_handle, spec.GetDeviceName(),
 				SND_PCM_STREAM_CAPTURE,
 				SND_PCM_NONBLOCK | global_config.mode)) < 0)
-		throw FormatRuntimeError("Failed to open device: %s (%s)",
-					 spec.GetDeviceName(), snd_strerror(err));
+		throw Alsa::MakeError(err,
+				      fmt::format("Failed to open device {}",
+						  spec.GetDeviceName()).c_str());
 
 	try {
 		ConfigureCapture(spec.GetAudioFormat());

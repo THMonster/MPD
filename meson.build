@@ -1,8 +1,8 @@
 project(
   'mpd',
   ['c', 'cpp'],
-  version: '0.22.11',
-  meson_version: '>= 0.49.0',
+  version: '0.23.4',
+  meson_version: '>= 0.56.0',
   default_options: [
     'c_std=c11',
     'build.c_std=c11',
@@ -10,9 +10,21 @@ project(
     'build.cpp_std=c++17',
     'warning_level=3',
 
-    # This is only here to build subprojects as static libraries; MPD
-    # itself doesn't ship any libraries.
-    'default_library=static',
+    # If we build those libraries as Meson subproject, they shall be
+    # linked statically into the MPD executable.
+    'expat:default_library=static',
+    'fmt:default_library=static',
+    'gtest:default_library=static',
+    'sqlite3:default_library=static',
+    'vorbis:default_library=static',
+
+    # Not interested in compiler warnings from subprojects.
+    'expat:werror=false',
+    'expat:warning_level=0',
+    'fmt:warning_level=0',
+    'gtest:warning_level=0',
+    'sqlite3:warning_level=0',
+    'vorbis:warning_level=0',
   ],
   license: 'GPLv2+',
 )
@@ -32,7 +44,7 @@ version_conf = configuration_data()
 version_conf.set_quoted('PACKAGE', meson.project_name())
 version_conf.set_quoted('PACKAGE_NAME', meson.project_name())
 version_conf.set_quoted('VERSION', meson.project_version())
-version_conf.set_quoted('PROTOCOL_VERSION', '0.22.4')
+version_conf.set_quoted('PROTOCOL_VERSION', '0.23.4')
 configure_file(output: 'Version.h', configuration: version_conf)
 
 conf = configuration_data()
@@ -47,11 +59,20 @@ test_global_common_flags = [
 ]
 
 test_common_flags = [
-  '-Wvla',
-  '-Wdouble-promotion',
-
   '-ffast-math',
   '-ftree-vectorize',
+
+  '-Wcast-qual',
+  '-Wdouble-promotion',
+  '-Wmissing-declarations',
+  '-Wshadow',
+  '-Wunused',
+  '-Wvla',
+  '-Wwrite-strings',
+
+  # clang specific warning options:
+  '-Wunreachable-code-aggressive',
+  '-Wused-but-marked-unused',
 ]
 
 test_global_cxxflags = test_global_common_flags + [
@@ -64,18 +85,13 @@ test_cxxflags = test_common_flags + [
   '-fno-threadsafe-statics',
   '-fmerge-all-constants',
 
-  '-Wcast-qual',
   '-Wcomma-subscript',
   '-Wextra-semi',
   '-Wmismatched-tags',
-  '-Wmissing-declarations',
   '-Woverloaded-virtual',
-  '-Wshadow',
   '-Wsign-promo',
-  '-Wunused',
   '-Wvolatile',
   '-Wvirtual-inheritance',
-  '-Wwrite-strings',
 
   # a vtable without a dtor is just fine
   '-Wno-non-virtual-dtor',
@@ -84,8 +100,6 @@ test_cxxflags = test_common_flags + [
   '-Wcomma',
   '-Wheader-hygiene',
   '-Winconsistent-missing-destructor-override',
-  '-Wunreachable-code-aggressive',
-  '-Wused-but-marked-unused',
 ]
 
 if compiler.get_id() != 'gcc' or compiler.version().version_compare('>=9')
@@ -95,11 +109,8 @@ if compiler.get_id() != 'gcc' or compiler.version().version_compare('>=9')
 endif
 
 test_cflags = test_common_flags + [
-  '-Wcast-qual',
   '-Wmissing-prototypes',
-  '-Wshadow',
   '-Wstrict-prototypes',
-  '-Wwrite-strings',
 ]
 
 test_ldflags = [
@@ -205,17 +216,6 @@ conf.set('HAVE_STRCASESTR', compiler.has_function('strcasestr'))
 
 conf.set('HAVE_PRCTL', is_linux)
 
-conf.set('USE_EVENTFD', is_linux and get_option('eventfd'))
-conf.set('USE_SIGNALFD', is_linux and get_option('signalfd'))
-
-if is_windows
-  conf.set('USE_WINSELECT', true)
-elif is_linux and get_option('epoll')
-  conf.set('USE_EPOLL', true)
-else
-  conf.set('USE_POLL', true)
-endif
-
 if not get_option('syslog').disabled()
   if compiler.has_function('syslog')
     conf.set('HAVE_SYSLOG', true)
@@ -246,23 +246,27 @@ if boost_dep.version() == '1.67'
   warning('Your Boost version 1.67 is known to be buggy, and the MPD build will fail. Please upgrade to Boost 1.68 or later.')
 endif
 
+fmt_dep = dependency('fmt', fallback: ['fmt', 'fmt_dep'])
+
 log = static_library(
   'log',
   'src/Log.cxx',
   'src/LogBackend.cxx',
   include_directories: inc,
+  dependencies: fmt_dep,
 )
 
 log_dep = declare_dependency(
   link_with: log,
+  dependencies: fmt_dep,
 )
 
 sources = [
   version_cxx,
   'src/Main.cxx',
   'src/protocol/ArgParser.cxx',
-  'src/protocol/Result.cxx',
   'src/command/CommandError.cxx',
+  'src/command/PositionArg.cxx',
   'src/command/AllCommands.cxx',
   'src/command/QueueCommands.cxx',
   'src/command/TagCommands.cxx',
@@ -277,7 +281,6 @@ sources = [
   'src/command/CommandListBuilder.cxx',
   'src/Idle.cxx',
   'src/IdleFlags.cxx',
-  'src/decoder/Domain.cxx',
   'src/decoder/Thread.cxx',
   'src/decoder/Control.cxx',
   'src/decoder/Bridge.cxx',
@@ -408,6 +411,7 @@ subdir('src/lib/gcrypt')
 subdir('src/lib/nfs')
 subdir('src/lib/oss')
 subdir('src/lib/pcre')
+subdir('src/lib/pipewire')
 subdir('src/lib/pulse')
 subdir('src/lib/sndio')
 subdir('src/lib/sqlite')
@@ -416,6 +420,8 @@ subdir('src/lib/upnp')
 subdir('src/lib/yajl')
 
 subdir('src/lib/crypto')
+
+subdir('src/zeroconf')
 
 subdir('src/fs')
 subdir('src/config')
@@ -432,7 +438,6 @@ subdir('src/decoder')
 subdir('src/encoder')
 subdir('src/song')
 subdir('src/playlist')
-subdir('src/zeroconf')
 
 if curl_dep.found()
   sources += 'src/RemoteTagCache.cxx'
@@ -548,6 +553,7 @@ mpd = build_target(
     zeroconf_dep,
     more_deps,
     chromaprint_dep,
+    fmt_dep,
   ],
   link_args: link_args,
   build_by_default: not get_option('fuzzer'),

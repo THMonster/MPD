@@ -90,8 +90,8 @@ public:
 	AudioFormat out_audio_format;
 
 	/**
-	 * The filter object of this audio output.  This is an
-	 * instance of chain_filter_plugin.
+	 * The filter object of this audio output.  This is a chain of
+	 * #PreparedTwoFilter instances.
 	 */
 	std::unique_ptr<PreparedFilter> prepared_filter;
 
@@ -181,7 +181,8 @@ public:
 	void Disable() noexcept;
 
 	/**
-	 * Invoke OutputPlugin::close().
+	 * Close everything: the output (via CloseOutput()) and the
+	 * software mixer (via CloseSoftwareMixer()).
 	 *
 	 * Caller must not lock the mutex.
 	 */
@@ -200,7 +201,7 @@ public:
 	void OpenOutputAndConvert(AudioFormat audio_format);
 
 	/**
-	 * Close the output plugin.
+	 * Invoke AudioOutput::Close(), but nothing else.
 	 *
 	 * Mutex must not be locked.
 	 */
@@ -239,7 +240,7 @@ public:
  * Throws on error.
  */
 std::unique_ptr<FilteredAudioOutput>
-audio_output_new(EventLoop &event_loop,
+audio_output_new(EventLoop &event_loop, EventLoop &rt_event_loop,
 		 const ReplayGainConfig &replay_gain_config,
 		 const ConfigBlock &block,
 		 const AudioOutputDefaults &defaults,

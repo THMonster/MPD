@@ -17,166 +17,35 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include "LogV.hxx"
+#include "Log.hxx"
+#include "lib/fmt/ExceptionFormatter.hxx"
 #include "util/Domain.hxx"
-#include "util/Exception.hxx"
 
-#include <cerrno>
-
-#include <stdio.h>
-#include <string.h>
+#include <fmt/format.h>
 
 static constexpr Domain exception_domain("exception");
 
 void
-LogFormatV(LogLevel level, const Domain &domain,
-	   const char *fmt, std::va_list ap) noexcept
+LogVFmt(LogLevel level, const Domain &domain,
+	fmt::string_view format_str, fmt::format_args args) noexcept
 {
-	char msg[1024];
-	vsnprintf(msg, sizeof(msg), fmt, ap);
-	Log(level, domain, msg);
-}
-
-void
-LogFormat(LogLevel level, const Domain &domain, const char *fmt, ...) noexcept
-{
-	std::va_list ap;
-	va_start(ap, fmt);
-	LogFormatV(level, domain, fmt, ap);
-	va_end(ap);
-}
-
-void
-FormatDebug(const Domain &domain, const char *fmt, ...) noexcept
-{
-	std::va_list ap;
-	va_start(ap, fmt);
-	LogFormatV(LogLevel::DEBUG, domain, fmt, ap);
-	va_end(ap);
-}
-
-void
-FormatInfo(const Domain &domain, const char *fmt, ...) noexcept
-{
-	std::va_list ap;
-	va_start(ap, fmt);
-	LogFormatV(LogLevel::INFO, domain, fmt, ap);
-	va_end(ap);
-}
-
-void
-FormatNotice(const Domain &domain, const char *fmt, ...) noexcept
-{
-	std::va_list ap;
-	va_start(ap, fmt);
-	LogFormatV(LogLevel::NOTICE, domain, fmt, ap);
-	va_end(ap);
-}
-
-void
-FormatWarning(const Domain &domain, const char *fmt, ...) noexcept
-{
-	std::va_list ap;
-	va_start(ap, fmt);
-	LogFormatV(LogLevel::WARNING, domain, fmt, ap);
-	va_end(ap);
-}
-
-void
-FormatError(const Domain &domain, const char *fmt, ...) noexcept
-{
-	std::va_list ap;
-	va_start(ap, fmt);
-	LogFormatV(LogLevel::ERROR, domain, fmt, ap);
-	va_end(ap);
-}
-
-void
-Log(LogLevel level, const std::exception &e) noexcept
-{
-	Log(level, exception_domain, GetFullMessage(e).c_str());
-}
-
-void
-Log(LogLevel level, const std::exception &e, const char *msg) noexcept
-{
-	LogFormat(level, exception_domain, "%s: %s", msg, GetFullMessage(e).c_str());
-}
-
-void
-LogFormat(LogLevel level, const std::exception &e, const char *fmt, ...) noexcept
-{
-	char msg[1024];
-	std::va_list ap;
-	va_start(ap, fmt);
-	vsnprintf(msg, sizeof(msg), fmt, ap);
-	va_end(ap);
-
-	Log(level, e, msg);
+	fmt::memory_buffer buffer;
+#if FMT_VERSION >= 80000
+	fmt::vformat_to(std::back_inserter(buffer), format_str, args);
+#else
+	fmt::vformat_to(buffer, format_str, args);
+#endif
+	Log(level, domain, {buffer.data(), buffer.size()});
 }
 
 void
 Log(LogLevel level, const std::exception_ptr &ep) noexcept
 {
-	Log(level, exception_domain, GetFullMessage(ep).c_str());
+	Log(level, exception_domain, GetFullMessage(ep));
 }
 
 void
 Log(LogLevel level, const std::exception_ptr &ep, const char *msg) noexcept
 {
-	LogFormat(level, exception_domain, "%s: %s", msg,
-		  GetFullMessage(ep).c_str());
-}
-
-void
-LogFormat(LogLevel level, const std::exception_ptr &ep, const char *fmt, ...) noexcept
-{
-	char msg[1024];
-	std::va_list ap;
-	va_start(ap, fmt);
-	vsnprintf(msg, sizeof(msg), fmt, ap);
-	va_end(ap);
-
-	Log(level, ep, msg);
-}
-
-void
-LogErrno(const Domain &domain, int e, const char *msg) noexcept
-{
-	LogFormat(LogLevel::ERROR, domain, "%s: %s", msg, strerror(e));
-}
-
-void
-LogErrno(const Domain &domain, const char *msg) noexcept
-{
-	LogErrno(domain, errno, msg);
-}
-
-static void
-FormatErrnoV(const Domain &domain, int e, const char *fmt, std::va_list ap) noexcept
-{
-	char msg[1024];
-	vsnprintf(msg, sizeof(msg), fmt, ap);
-
-	LogErrno(domain, e, msg);
-}
-
-void
-FormatErrno(const Domain &domain, int e, const char *fmt, ...) noexcept
-{
-	std::va_list ap;
-	va_start(ap, fmt);
-	FormatErrnoV(domain, e, fmt, ap);
-	va_end(ap);
-}
-
-void
-FormatErrno(const Domain &domain, const char *fmt, ...) noexcept
-{
-	const int e = errno;
-
-	std::va_list ap;
-	va_start(ap, fmt);
-	FormatErrnoV(domain, e, fmt, ap);
-	va_end(ap);
+	LogFmt(level, exception_domain, "{}: {}", msg, ep);
 }

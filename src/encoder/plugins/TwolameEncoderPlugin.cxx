@@ -54,6 +54,9 @@ public:
 		 audio_format(_audio_format), options(_options) {}
 	~TwolameEncoder() noexcept override;
 
+	TwolameEncoder(const TwolameEncoder &) = delete;
+	TwolameEncoder &operator=(const TwolameEncoder &) = delete;
+
 	/* virtual methods from class Encoder */
 
 	void End() override {
@@ -121,8 +124,8 @@ PreparedTwolameEncoder::PreparedTwolameEncoder(const ConfigBlock &block)
 static PreparedEncoder *
 twolame_encoder_init(const ConfigBlock &block)
 {
-	FormatDebug(twolame_encoder_domain,
-		    "libtwolame version %s", get_twolame_version());
+	FmtDebug(twolame_encoder_domain,
+		 "libtwolame version {}", get_twolame_version());
 
 	return new PreparedTwolameEncoder(block);
 }

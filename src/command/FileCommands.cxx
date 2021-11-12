@@ -17,8 +17,6 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#define __STDC_FORMAT_MACROS /* for PRIu64 */
-
 #include "config.h"
 #include "FileCommands.hxx"
 #include "Request.hxx"
@@ -47,9 +45,11 @@
 #include "thread/Mutex.hxx"
 #include "Log.hxx"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <cassert>
-#include <cinttypes> /* for PRIu64 */
+#include <array>
 
 gcc_pure
 static bool
@@ -64,13 +64,6 @@ skip_path(Path name_fs) noexcept
 {
 	return name_fs.HasNewline();
 }
-
-#if defined(_WIN32) && GCC_CHECK_VERSION(4,6)
-/* PRIu64 causes bogus compiler warning */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat"
-#pragma GCC diagnostic ignored "-Wformat-extra-args"
-#endif
 
 CommandResult
 handle_listfiles_local(Response &r, Path path_fs)
@@ -92,12 +85,12 @@ handle_listfiles_local(Response &r, Path path_fs)
 			continue;
 
 		if (fi.IsRegular())
-			r.Format("file: %s\n"
-				 "size: %" PRIu64 "\n",
-				 name_utf8.c_str(),
-				 fi.GetSize());
+			r.Fmt(FMT_STRING("file: {}\n"
+					 "size: {}\n"),
+			      name_utf8,
+			      fi.GetSize());
 		else if (fi.IsDirectory())
-			r.Format("directory: %s\n", name_utf8.c_str());
+			r.Fmt(FMT_STRING("directory: {}\n"), name_utf8);
 		else
 			continue;
 
@@ -118,12 +111,9 @@ IsValidName(const StringView s) noexcept
 	if (s.empty() || !IsAlphaASCII(s.front()))
 		return false;
 
-	for (const char ch : s) {
-		if (!IsAlphaASCII(ch) && ch != '_' && ch != '-')
-			return false;
-	}
-
-	return true;
+	return std::none_of(s.begin(), s.end(), [=](const auto &ch) {
+		return !IsAlphaASCII(ch) && ch != '_' && ch != '-';
+	});
 }
 
 gcc_pure
@@ -142,9 +132,7 @@ public:
 
 	void OnPair(StringView key, StringView value) noexcept override {
 		if (IsValidName(key) && IsValidValue(value))
-			response.Format("%.*s: %.*s\n",
-					int(key.size), key.data,
-					int(value.size), value.data);
+			response.Fmt(FMT_STRING("{}: {}\n"), key, value);
 	}
 };
 
@@ -169,14 +157,14 @@ handle_read_comments(Client &client, Request args, Response &r)
 static InputStreamPtr
 find_stream_art(std::string_view directory, Mutex &mutex)
 {
-	static constexpr char const * art_names[] = {
+	static constexpr auto art_names = std::array {
 		"cover.png",
 		"cover.jpg",
 		"cover.tiff",
-		"cover.bmp"
+		"cover.bmp",
 	};
 
-	for(const auto name: art_names) {
+	for(const auto name : art_names) {
 		std::string art_file = PathTraitsUTF8::Build(directory, name);
 
 		try {
@@ -234,11 +222,7 @@ read_stream_art(Response &r, const std::string_view art_directory,
 		read_size = is->Read(lock, buffer.get(), buffer_size);
 	}
 
-#ifdef _WIN32
-	r.Format("size: %lu\n", (unsigned long)art_file_size);
-#else
-	r.Format("size: %" PRIoffset "\n", art_file_size);
-#endif
+	r.Fmt(FMT_STRING("size: {}\n"), art_file_size);
 
 	r.WriteBinary({buffer.get(), read_size});
 
@@ -368,14 +352,10 @@ public:
 			return;
 		}
 
-#ifdef _WIN32
-		response.Format("size: %lu\n", (unsigned long)buffer.size);
-#else
-		response.Format("size: %zu\n", buffer.size);
-#endif
+		response.Fmt(FMT_STRING("size: {}\n"), buffer.size);
 
 		if (mime_type != nullptr)
-			response.Format("type: %s\n", mime_type);
+			response.Fmt(FMT_STRING("type: {}\n"), mime_type);
 
 		buffer.size -= offset;
 

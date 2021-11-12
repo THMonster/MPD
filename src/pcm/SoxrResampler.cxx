@@ -200,9 +200,8 @@ pcm_resample_soxr_global_init(const ConfigBlock &block)
 		soxr_quality = soxr_quality_spec(recipe, 0);
 	}
 
-	FormatDebug(soxr_domain,
-		    "soxr converter '%s'",
-		    soxr_quality_name(recipe));
+	FmtDebug(soxr_domain, "soxr converter '{}'",
+		 soxr_quality_name(recipe));
 
 	const unsigned n_threads = block.GetBlockValue("threads", 1);
 	soxr_runtime = soxr_runtime_spec(n_threads);
@@ -226,27 +225,25 @@ SoxrPcmResampler::Open(AudioFormat &af, unsigned new_sample_rate)
 		throw FormatRuntimeError("soxr initialization has failed: %s",
 					 e);
 
-	FormatDebug(soxr_domain, "soxr engine '%s'", soxr_engine(soxr));
+	FmtDebug(soxr_domain, "soxr engine '{}'", soxr_engine(soxr));
 	if (soxr_use_custom_recipe)
-		FormatDebug(soxr_domain,
-			    "soxr precision=%0.0f, phase_response=%0.2f, "
-			    "passband_end=%0.2f, stopband_begin=%0.2f scale=%0.2f",
-			    soxr_quality.precision, soxr_quality.phase_response,
-			    soxr_quality.passband_end, soxr_quality.stopband_begin,
-			    soxr_io_custom_recipe.scale);
+		FmtDebug(soxr_domain,
+			 "soxr precision={:0.0f}, phase_response={:0.2f}, "
+			 "passband_end={:0.2f}, stopband_begin={:0.2f} scale={:0.2f}",
+			 soxr_quality.precision, soxr_quality.phase_response,
+			 soxr_quality.passband_end, soxr_quality.stopband_begin,
+			 soxr_io_custom_recipe.scale);
 	else
-		FormatDebug(soxr_domain,
-			    "soxr precision=%0.0f, phase_response=%0.2f, "
-			    "passband_end=%0.2f, stopband_begin=%0.2f",
-			    soxr_quality.precision, soxr_quality.phase_response,
-			    soxr_quality.passband_end, soxr_quality.stopband_begin);
+		FmtDebug(soxr_domain,
+			 "soxr precision={:0.0f}, phase_response={:0.2f}, "
+			 "passband_end={:0.2f}, stopband_begin={:0.2f}",
+			 soxr_quality.precision, soxr_quality.phase_response,
+			 soxr_quality.passband_end, soxr_quality.stopband_begin);
 
 	channels = af.channels;
 
 	ratio = float(new_sample_rate) / float(af.sample_rate);
-	FormatDebug(soxr_domain,
-		    "samplerate conversion ratio to %.2lf",
-		    double(ratio));
+	FmtDebug(soxr_domain, "samplerate conversion ratio to {:0.2f}", ratio);
 
 	/* libsoxr works with floating point samples */
 	af.format = SampleFormat::FLOAT;

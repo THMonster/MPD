@@ -1,7 +1,6 @@
 util = static_library(
   'util',
   'Exception.cxx',
-  'Alloc.cxx',
   'UTF8.cxx',
   'HexFormat.cxx',
   'MimeType.cxx',
@@ -29,6 +28,7 @@ util = static_library(
   'ByteReverse.cxx',
   'format.c',
   'BitReverse.cxx',
+  'Serial.cxx',
   include_directories: inc,
 )
 

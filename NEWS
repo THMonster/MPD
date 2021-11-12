@@ -1,3 +1,87 @@
+ver 0.23.4 (2021/11/11)
+* protocol
+  - add optional position parameter to "searchaddpl"
+* decoder
+  - ffmpeg: support libavcodec 59
+* output
+  - alsa: add option "thesycon_dsd_workaround" to work around device bug
+* fix crash on debug builds if startup fails
+* systemd
+  - remove "RuntimeDirectory" directive because it caused problems
+  - ignore the "pid_file" setting if started as systemd service
+* Windows
+  - enable the "openmpt" decoder plugin
+
+ver 0.23.3 (2021/10/31)
+* protocol
+  - add optional position parameter to "add" and "playlistadd"
+  - allow range in "playlistdelete"
+* database
+  - fix scanning files with question mark in the name
+  - inotify: fix use-after-free bug
+* output
+  - alsa: add option "stop_dsd_silence" to work around DSD DAC noise
+* macOS: fix libfmt related build failure
+* systemd: add "RuntimeDirectory" directive
+
+ver 0.23.2 (2021/10/22)
+* protocol
+  - fix "albumart" timeout bug
+* input
+  - nfs: fix playback bug
+* output
+  - pipewire: send artist and title to PipeWire
+  - pipewire: DSD support
+* neighbor
+  - mention failed plugin name in error message
+* player
+  - fix cross-fade regression
+* fix crash with libfmt versions older than 7
+
+ver 0.23.1 (2021/10/19)
+* protocol
+  - use decimal notation instead of scientific notation
+  - "load" supports relative positions
+* output
+  - emit "mixer" idle event when replay gain changes volume
+  - pipewire: emit "mixer" idle events on external volume change
+  - pipewire: attempt to change the graph sample rate
+  - snapcast: fix time stamp bug which caused "Failed to get chunk"
+* fix libfmt linker problems
+* fix broken password authentication
+
+ver 0.23 (2021/10/14)
+* protocol
+  - new command "getvol"
+  - show the audio format in "playlistinfo"
+  - support "listfiles" with arbitrary storage plugins
+  - support relative positions in "addid"
+  - fix relative positions in "move" and "moveid"
+  - add "position" parameter to "findadd" and "searchadd"
+  - add position parameter to "load"
+* database
+  - proxy: require MPD 0.20 or later
+  - proxy: require libmpdclient 2.11 or later
+  - proxy: split search into chunks to avoid exceeding the output buffer
+  - simple: add option to hide CUE target songs
+  - upnp: support libnpupnp instead of libupnp
+* archive
+  - zzip, iso9660: ignore file names which are invalid UTF-8
+* decoder
+  - openmpt: new plugin
+  - wavpack: fix WVC file support
+* player
+  - do not cross-fade songs shorter than 20 seconds
+* output
+  - oss: support DSD over PCM
+  - pipewire: new plugin
+  - snapcast: new plugin
+* tags
+  - new tags "ComposerSort", "Ensemble", "Movement", "MovementNumber", and "Location"
+* split permission "player" from "control"
+* add option "host_permissions"
+* new build-time dependency: libfmt
+
 ver 0.22.11 (2021/08/24)
 * protocol
   - fix "albumart" crash

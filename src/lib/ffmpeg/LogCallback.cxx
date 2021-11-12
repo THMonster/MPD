@@ -22,15 +22,15 @@
 
 #include "LogCallback.hxx"
 #include "Domain.hxx"
-#include "LogV.hxx"
 #include "util/Domain.hxx"
 #include "util/StringFormat.hxx"
+#include "Log.hxx"
 
 extern "C" {
 #include <libavutil/log.h>
 }
 
-gcc_const
+[[gnu::const]]
 static LogLevel
 FfmpegImportLogLevel(int level) noexcept
 {
@@ -60,6 +60,10 @@ FfmpegLogCallback(void *ptr, int level, const char *fmt, std::va_list vl)
 					 ffmpeg_domain.GetName(),
 					 cls->item_name(ptr));
 		const Domain d(domain);
-		LogFormatV(FfmpegImportLogLevel(level), d, fmt, vl);
+
+		char msg[1024];
+		vsnprintf(msg, sizeof(msg), fmt, vl);
+
+		Log(FfmpegImportLogLevel(level), d, msg);
 	}
 }

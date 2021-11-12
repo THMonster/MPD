@@ -31,7 +31,6 @@
 #define CDIO_PARANOIA_HXX
 
 #include "util/ConstBuffer.hxx"
-#include "util/Compiler.h"
 
 #include <cdio/version.h>
 #include <cdio/paranoia/paranoia.h>
@@ -85,10 +84,10 @@ public:
 		auto last = cdio_cddap_disc_lastsector(drv);
 		if (first < 0 || last < 0)
 			throw std::runtime_error("Failed to get disc audio sectors");
-		return std::make_pair(first, last);
+		return std::pair(first, last);
 	}
 
-	gcc_pure
+	[[gnu::pure]]
 	bool IsAudioTrack(track_t i) const noexcept {
 		return cdio_cddap_track_audiop(drv, i);
 	}
@@ -98,10 +97,10 @@ public:
 		auto last = cdio_cddap_track_lastsector(drv, i);
 		if (first < 0 || last < 0)
 			throw std::runtime_error("Invalid track number");
-		return std::make_pair(first, last);
+		return std::pair(first, last);
 	}
 
-	gcc_pure
+	[[gnu::pure]]
 	unsigned GetTrackCount() const noexcept {
 		return cdio_cddap_tracks(drv);
 	}

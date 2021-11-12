@@ -22,6 +22,8 @@
 #include "Filtered.hxx"
 #include "Client.hxx"
 #include "Domain.hxx"
+#include "lib/fmt/AudioFormatFormatter.hxx"
+#include "lib/fmt/ExceptionFormatter.hxx"
 #include "thread/Util.hxx"
 #include "thread/Slack.hxx"
 #include "thread/Name.hxx"
@@ -72,13 +74,7 @@ AudioOutputControl::InternalOpen2(const AudioFormat in_audio_format)
 		try {
 			output->ConfigureConvertFilter();
 		} catch (...) {
-			open = false;
-
-			{
-				const ScopeUnlock unlock(mutex);
-				output->CloseOutput(false);
-			}
-
+			InternalCloseOutput(false);
 			throw;
 		}
 	}
@@ -166,10 +162,8 @@ AudioOutputControl::InternalOpen(const AudioFormat in_audio_format,
 	}
 
 	if (f != in_audio_format || f != output->out_audio_format)
-		FormatDebug(output_domain, "converting in=%s -> f=%s -> out=%s",
-			    ToString(in_audio_format).c_str(),
-			    ToString(f).c_str(),
-			    ToString(output->out_audio_format).c_str());
+		FmtDebug(output_domain, "converting in={} -> f={} -> out={}",
+			 in_audio_format, f, output->out_audio_format);
 }
 
 inline void
@@ -231,8 +225,9 @@ AudioOutputControl::FillSourceOrClose() noexcept
 try {
 	return source.Fill(mutex);
 } catch (...) {
-	FormatError(std::current_exception(),
-		    "Failed to filter for %s", GetLogName());
+	FmtError(output_domain,
+		 "Failed to filter for {}: {}",
+		 GetLogName(), std::current_exception());
 	InternalCloseError(std::current_exception());
 	return false;
 }
@@ -250,9 +245,9 @@ AudioOutputControl::PlayChunk(std::unique_lock<Mutex> &lock) noexcept
 			caught_interrupted = true;
 			return false;
 		} catch (...) {
-			FormatError(std::current_exception(),
-				    "Failed to send tag to %s",
-				    GetLogName());
+			FmtError(output_domain,
+				 "Failed to send tag to {}: {}",
+				 GetLogName(), std::current_exception());
 		}
 	}
 
@@ -277,8 +272,9 @@ AudioOutputControl::PlayChunk(std::unique_lock<Mutex> &lock) noexcept
 			caught_interrupted = true;
 			return false;
 		} catch (...) {
-			FormatError(std::current_exception(),
-				    "Failed to play on %s", GetLogName());
+			FmtError(output_domain,
+				 "Failed to play on {}: {}",
+				 GetLogName(), std::current_exception());
 			InternalCloseError(std::current_exception());
 			return false;
 		}
@@ -356,9 +352,9 @@ AudioOutputControl::InternalPause(std::unique_lock<Mutex> &lock) noexcept
 			success = output->IteratePause();
 		} catch (AudioOutputInterrupted) {
 		} catch (...) {
-			FormatError(std::current_exception(),
-				    "Failed to pause %s",
-				    GetLogName());
+			FmtError(output_domain,
+				 "Failed to pause {}: {}",
+				 GetLogName(), std::current_exception());
 		}
 
 		if (!success) {
@@ -416,8 +412,9 @@ AudioOutputControl::InternalDrain() noexcept
 
 		output->Drain();
 	} catch (...) {
-		FormatError(std::current_exception(),
-			    "Failed to flush filter on %s", GetLogName());
+		FmtError(output_domain,
+			 "Failed to flush filter on {}: {}",
+			 GetLogName(), std::current_exception());
 		InternalCloseError(std::current_exception());
 		return;
 	}
@@ -431,8 +428,9 @@ AudioOutputControl::Task() noexcept
 	try {
 		SetThreadRealtime();
 	} catch (...) {
-		Log(LogLevel::INFO, std::current_exception(),
-		    "OutputThread could not get realtime scheduling, continuing anyway");
+		FmtInfo(output_domain,
+			"OutputThread could not get realtime scheduling, continuing anyway: {}",
+			std::current_exception());
 	}
 
 	SetThreadTimerSlack(std::chrono::microseconds(100));

@@ -48,6 +48,8 @@
 #include "StickerCommands.hxx"
 #endif
 
+#include <fmt/format.h>
+
 #include <cassert>
 #include <iterator>
 
@@ -83,27 +85,27 @@ handle_not_commands(Client &client, Request request, Response &response);
  * This array must be sorted!
  */
 static constexpr struct command commands[] = {
-	{ "add", PERMISSION_ADD, 1, 1, handle_add },
+	{ "add", PERMISSION_ADD, 1, 2, handle_add },
 	{ "addid", PERMISSION_ADD, 1, 2, handle_addid },
 	{ "addtagid", PERMISSION_ADD, 3, 3, handle_addtagid },
 	{ "albumart", PERMISSION_READ, 2, 2, handle_album_art },
 	{ "binarylimit", PERMISSION_NONE, 1, 1, handle_binary_limit },
 	{ "channels", PERMISSION_READ, 0, 0, handle_channels },
-	{ "clear", PERMISSION_CONTROL, 0, 0, handle_clear },
-	{ "clearerror", PERMISSION_CONTROL, 0, 0, handle_clearerror },
+	{ "clear", PERMISSION_PLAYER, 0, 0, handle_clear },
+	{ "clearerror", PERMISSION_PLAYER, 0, 0, handle_clearerror },
 	{ "cleartagid", PERMISSION_ADD, 1, 2, handle_cleartagid },
 	{ "close", PERMISSION_NONE, -1, -1, handle_close },
 	{ "commands", PERMISSION_NONE, 0, 0, handle_commands },
 	{ "config", PERMISSION_ADMIN, 0, 0, handle_config },
-	{ "consume", PERMISSION_CONTROL, 1, 1, handle_consume },
+	{ "consume", PERMISSION_PLAYER, 1, 1, handle_consume },
 #ifdef ENABLE_DATABASE
 	{ "count", PERMISSION_READ, 1, -1, handle_count },
 #endif
-	{ "crossfade", PERMISSION_CONTROL, 1, 1, handle_crossfade },
+	{ "crossfade", PERMISSION_PLAYER, 1, 1, handle_crossfade },
 	{ "currentsong", PERMISSION_READ, 0, 0, handle_currentsong },
 	{ "decoders", PERMISSION_READ, 0, 0, handle_decoders },
-	{ "delete", PERMISSION_CONTROL, 1, 1, handle_delete },
-	{ "deleteid", PERMISSION_CONTROL, 1, 1, handle_deleteid },
+	{ "delete", PERMISSION_PLAYER, 1, 1, handle_delete },
+	{ "deleteid", PERMISSION_PLAYER, 1, 1, handle_deleteid },
 	{ "delpartition", PERMISSION_ADMIN, 1, 1, handle_delpartition },
 	{ "disableoutput", PERMISSION_ADMIN, 1, 1, handle_disableoutput },
 	{ "enableoutput", PERMISSION_ADMIN, 1, 1, handle_enableoutput },
@@ -114,6 +116,7 @@ static constexpr struct command commands[] = {
 #ifdef ENABLE_CHROMAPRINT
 	{ "getfingerprint", PERMISSION_READ, 1, 1, handle_getfingerprint },
 #endif
+	{ "getvol", PERMISSION_READ, 0, 0, handle_getvol },
 	{ "idle", PERMISSION_READ, 0, -1, handle_idle },
 	{ "kill", PERMISSION_ADMIN, -1, -1, handle_kill },
 #ifdef ENABLE_DATABASE
@@ -132,29 +135,29 @@ static constexpr struct command commands[] = {
 	{ "listplaylist", PERMISSION_READ, 1, 1, handle_listplaylist },
 	{ "listplaylistinfo", PERMISSION_READ, 1, 1, handle_listplaylistinfo },
 	{ "listplaylists", PERMISSION_READ, 0, 0, handle_listplaylists },
-	{ "load", PERMISSION_ADD, 1, 2, handle_load },
+	{ "load", PERMISSION_ADD, 1, 3, handle_load },
 	{ "lsinfo", PERMISSION_READ, 0, 1, handle_lsinfo },
-	{ "mixrampdb", PERMISSION_CONTROL, 1, 1, handle_mixrampdb },
-	{ "mixrampdelay", PERMISSION_CONTROL, 1, 1, handle_mixrampdelay },
+	{ "mixrampdb", PERMISSION_PLAYER, 1, 1, handle_mixrampdb },
+	{ "mixrampdelay", PERMISSION_PLAYER, 1, 1, handle_mixrampdelay },
 #ifdef ENABLE_DATABASE
 	{ "mount", PERMISSION_ADMIN, 2, 2, handle_mount },
 #endif
-	{ "move", PERMISSION_CONTROL, 2, 2, handle_move },
-	{ "moveid", PERMISSION_CONTROL, 2, 2, handle_moveid },
+	{ "move", PERMISSION_PLAYER, 2, 2, handle_move },
+	{ "moveid", PERMISSION_PLAYER, 2, 2, handle_moveid },
 	{ "moveoutput", PERMISSION_ADMIN, 1, 1, handle_moveoutput },
 	{ "newpartition", PERMISSION_ADMIN, 1, 1, handle_newpartition },
-	{ "next", PERMISSION_CONTROL, 0, 0, handle_next },
+	{ "next", PERMISSION_PLAYER, 0, 0, handle_next },
 	{ "notcommands", PERMISSION_NONE, 0, 0, handle_not_commands },
 	{ "outputs", PERMISSION_READ, 0, 0, handle_devices },
 	{ "outputset", PERMISSION_ADMIN, 3, 3, handle_outputset },
 	{ "partition", PERMISSION_READ, 1, 1, handle_partition },
 	{ "password", PERMISSION_NONE, 1, 1, handle_password },
-	{ "pause", PERMISSION_CONTROL, 0, 1, handle_pause },
+	{ "pause", PERMISSION_PLAYER, 0, 1, handle_pause },
 	{ "ping", PERMISSION_NONE, 0, 0, handle_ping },
-	{ "play", PERMISSION_CONTROL, 0, 1, handle_play },
-	{ "playid", PERMISSION_CONTROL, 0, 1, handle_playid },
+	{ "play", PERMISSION_PLAYER, 0, 1, handle_play },
+	{ "playid", PERMISSION_PLAYER, 0, 1, handle_playid },
 	{ "playlist", PERMISSION_READ, 0, 0, handle_playlist },
-	{ "playlistadd", PERMISSION_CONTROL, 2, 2, handle_playlistadd },
+	{ "playlistadd", PERMISSION_CONTROL, 2, 3, handle_playlistadd },
 	{ "playlistclear", PERMISSION_CONTROL, 1, 1, handle_playlistclear },
 	{ "playlistdelete", PERMISSION_CONTROL, 2, 2, handle_playlistdelete },
 	{ "playlistfind", PERMISSION_READ, 1, -1, handle_playlistfind },
@@ -164,17 +167,17 @@ static constexpr struct command commands[] = {
 	{ "playlistsearch", PERMISSION_READ, 1, -1, handle_playlistsearch },
 	{ "plchanges", PERMISSION_READ, 1, 2, handle_plchanges },
 	{ "plchangesposid", PERMISSION_READ, 1, 2, handle_plchangesposid },
-	{ "previous", PERMISSION_CONTROL, 0, 0, handle_previous },
-	{ "prio", PERMISSION_CONTROL, 2, -1, handle_prio },
-	{ "prioid", PERMISSION_CONTROL, 2, -1, handle_prioid },
-	{ "random", PERMISSION_CONTROL, 1, 1, handle_random },
+	{ "previous", PERMISSION_PLAYER, 0, 0, handle_previous },
+	{ "prio", PERMISSION_PLAYER, 2, -1, handle_prio },
+	{ "prioid", PERMISSION_PLAYER, 2, -1, handle_prioid },
+	{ "random", PERMISSION_PLAYER, 1, 1, handle_random },
 	{ "rangeid", PERMISSION_ADD, 2, 2, handle_rangeid },
 	{ "readcomments", PERMISSION_READ, 1, 1, handle_read_comments },
 	{ "readmessages", PERMISSION_READ, 0, 0, handle_read_messages },
 	{ "readpicture", PERMISSION_READ, 2, 2, handle_read_picture },
 	{ "rename", PERMISSION_CONTROL, 2, 2, handle_rename },
-	{ "repeat", PERMISSION_CONTROL, 1, 1, handle_repeat },
-	{ "replay_gain_mode", PERMISSION_CONTROL, 1, 1,
+	{ "repeat", PERMISSION_PLAYER, 1, 1, handle_repeat },
+	{ "replay_gain_mode", PERMISSION_PLAYER, 1, 1,
 	  handle_replay_gain_mode },
 	{ "replay_gain_status", PERMISSION_READ, 0, 0,
 	  handle_replay_gain_status },
@@ -186,22 +189,22 @@ static constexpr struct command commands[] = {
 	{ "searchadd", PERMISSION_ADD, 1, -1, handle_searchadd },
 	{ "searchaddpl", PERMISSION_CONTROL, 2, -1, handle_searchaddpl },
 #endif
-	{ "seek", PERMISSION_CONTROL, 2, 2, handle_seek },
-	{ "seekcur", PERMISSION_CONTROL, 1, 1, handle_seekcur },
-	{ "seekid", PERMISSION_CONTROL, 2, 2, handle_seekid },
+	{ "seek", PERMISSION_PLAYER, 2, 2, handle_seek },
+	{ "seekcur", PERMISSION_PLAYER, 1, 1, handle_seekcur },
+	{ "seekid", PERMISSION_PLAYER, 2, 2, handle_seekid },
 	{ "sendmessage", PERMISSION_CONTROL, 2, 2, handle_send_message },
-	{ "setvol", PERMISSION_CONTROL, 1, 1, handle_setvol },
-	{ "shuffle", PERMISSION_CONTROL, 0, 1, handle_shuffle },
-	{ "single", PERMISSION_CONTROL, 1, 1, handle_single },
+	{ "setvol", PERMISSION_PLAYER, 1, 1, handle_setvol },
+	{ "shuffle", PERMISSION_PLAYER, 0, 1, handle_shuffle },
+	{ "single", PERMISSION_PLAYER, 1, 1, handle_single },
 	{ "stats", PERMISSION_READ, 0, 0, handle_stats },
 	{ "status", PERMISSION_READ, 0, 0, handle_status },
 #ifdef ENABLE_SQLITE
 	{ "sticker", PERMISSION_ADMIN, 3, -1, handle_sticker },
 #endif
-	{ "stop", PERMISSION_CONTROL, 0, 0, handle_stop },
+	{ "stop", PERMISSION_PLAYER, 0, 0, handle_stop },
 	{ "subscribe", PERMISSION_READ, 1, 1, handle_subscribe },
-	{ "swap", PERMISSION_CONTROL, 2, 2, handle_swap },
-	{ "swapid", PERMISSION_CONTROL, 2, 2, handle_swapid },
+	{ "swap", PERMISSION_PLAYER, 2, 2, handle_swap },
+	{ "swapid", PERMISSION_PLAYER, 2, 2, handle_swapid },
 	{ "tagtypes", PERMISSION_NONE, 0, -1, handle_tagtypes },
 	{ "toggleoutput", PERMISSION_ADMIN, 1, 1, handle_toggleoutput },
 #ifdef ENABLE_DATABASE
@@ -210,7 +213,7 @@ static constexpr struct command commands[] = {
 	{ "unsubscribe", PERMISSION_READ, 1, 1, handle_unsubscribe },
 	{ "update", PERMISSION_CONTROL, 0, 1, handle_update },
 	{ "urlhandlers", PERMISSION_READ, 0, 0, handle_urlhandlers },
-	{ "volume", PERMISSION_CONTROL, 1, 1, handle_volume },
+	{ "volume", PERMISSION_PLAYER, 1, 1, handle_volume },
 };
 
 static constexpr unsigned num_commands = std::size(commands);
@@ -252,7 +255,7 @@ PrintAvailableCommands(Response &r, const Partition &partition,
 
 		if (cmd->permission == (permission & cmd->permission) &&
 		    command_available(partition, cmd))
-			r.Format("command: %s\n", cmd->cmd);
+			r.Fmt(FMT_STRING("command: {}\n"), cmd->cmd);
 	}
 
 	return CommandResult::OK;
@@ -265,7 +268,7 @@ PrintUnavailableCommands(Response &r, unsigned permission) noexcept
 		const struct command *cmd = &i;
 
 		if (cmd->permission != (permission & cmd->permission))
-			r.Format("command: %s\n", cmd->cmd);
+			r.Fmt(FMT_STRING("command: {}\n"), cmd->cmd);
 	}
 
 	return CommandResult::OK;
@@ -322,9 +325,9 @@ command_check_request(const struct command *cmd, Response &r,
 		      unsigned permission, Request args) noexcept
 {
 	if (cmd->permission != (permission & cmd->permission)) {
-		r.FormatError(ACK_ERROR_PERMISSION,
-			      "you don't have permission for \"%s\"",
-			      cmd->cmd);
+		r.FmtError(ACK_ERROR_PERMISSION,
+			   FMT_STRING("you don't have permission for \"{}\""),
+			   cmd->cmd);
 		return false;
 	}
 
@@ -335,17 +338,19 @@ command_check_request(const struct command *cmd, Response &r,
 		return true;
 
 	if (min == max && unsigned(max) != args.size) {
-		r.FormatError(ACK_ERROR_ARG,
-			      "wrong number of arguments for \"%s\"",
-			      cmd->cmd);
+		r.FmtError(ACK_ERROR_ARG,
+			   FMT_STRING("wrong number of arguments for \"{}\""),
+			   cmd->cmd);
 		return false;
 	} else if (args.size < unsigned(min)) {
-		r.FormatError(ACK_ERROR_ARG,
-			      "too few arguments for \"%s\"", cmd->cmd);
+		r.FmtError(ACK_ERROR_ARG,
+			   FMT_STRING("too few arguments for \"{}\""),
+			   cmd->cmd);
 		return false;
 	} else if (max >= 0 && args.size > unsigned(max)) {
-		r.FormatError(ACK_ERROR_ARG,
-			      "too many arguments for \"%s\"", cmd->cmd);
+		r.FmtError(ACK_ERROR_ARG,
+			   FMT_STRING("too many arguments for \"{}\""),
+			   cmd->cmd);
 		return false;
 	} else
 		return true;
@@ -357,8 +362,8 @@ command_checked_lookup(Response &r, unsigned permission,
 {
 	const struct command *cmd = command_lookup(cmd_name);
 	if (cmd == nullptr) {
-		r.FormatError(ACK_ERROR_UNKNOWN,
-			      "unknown command \"%s\"", cmd_name);
+		r.FmtError(ACK_ERROR_UNKNOWN,
+			   FMT_STRING("unknown command \"{}\""), cmd_name);
 		return nullptr;
 	}
 

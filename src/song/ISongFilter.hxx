@@ -20,8 +20,6 @@
 #ifndef MPD_I_SONG_FILTER_HXX
 #define MPD_I_SONG_FILTER_HXX
 
-#include "util/Compiler.h"
-
 #include <memory>
 #include <string>
 
@@ -31,7 +29,7 @@ using ISongFilterPtr = std::unique_ptr<ISongFilter>;
 
 class ISongFilter {
 public:
-	virtual ~ISongFilter() noexcept {}
+	virtual ~ISongFilter() noexcept = default;
 
 	virtual ISongFilterPtr Clone() const noexcept = 0;
 
@@ -41,7 +39,7 @@ public:
 	 */
 	virtual std::string ToExpression() const noexcept = 0;
 
-	gcc_pure
+	[[gnu::pure]]
 	virtual bool Match(const LightSong &song) const noexcept = 0;
 };
 

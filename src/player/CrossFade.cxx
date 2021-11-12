@@ -30,6 +30,14 @@
 
 static constexpr Domain cross_fade_domain("cross_fade");
 
+inline bool
+CrossFadeSettings::CanCrossFadeSong(SignedSongTime total_time) const noexcept
+{
+	return !total_time.IsNegative() &&
+		total_time >= MIN_TOTAL_TIME &&
+		duration < std::chrono::duration_cast<FloatDuration>(total_time);
+}
+
 gcc_pure
 static FloatDuration
 mixramp_interpolate(const char *ramp_list, float required_db) noexcept
@@ -87,7 +95,8 @@ mixramp_interpolate(const char *ramp_list, float required_db) noexcept
 }
 
 unsigned
-CrossFadeSettings::Calculate(SignedSongTime total_time,
+CrossFadeSettings::Calculate(SignedSongTime current_total_time,
+			     SignedSongTime next_total_time,
 			     float replay_gain_db, float replay_gain_prev_db,
 			     const char *mixramp_start, const char *mixramp_prev_end,
 			     const AudioFormat af,
@@ -96,9 +105,9 @@ CrossFadeSettings::Calculate(SignedSongTime total_time,
 {
 	unsigned int chunks = 0;
 
-	if (total_time.IsNegative() ||
-	    duration <= FloatDuration::zero() ||
-	    duration >= std::chrono::duration_cast<FloatDuration>(total_time) ||
+	if (!IsEnabled() ||
+	    !CanCrossFadeSong(current_total_time) ||
+	    !CanCrossFadeSong(next_total_time) ||
 	    /* we can't crossfade when the audio formats are different */
 	    af != old_format)
 		return 0;
@@ -128,9 +137,9 @@ CrossFadeSettings::Calculate(SignedSongTime total_time,
 		    mixramp_delay <= mixramp_overlap) {
 			chunks = lround((mixramp_overlap - mixramp_delay)
 					/ chunk_duration);
-			FormatDebug(cross_fade_domain,
-				    "will overlap %d chunks, %fs", chunks,
-				    (mixramp_overlap - mixramp_delay).count());
+			FmtDebug(cross_fade_domain,
+				 "will overlap {} chunks, {}s", chunks,
+				 (mixramp_overlap - mixramp_delay).count());
 		}
 	}
 

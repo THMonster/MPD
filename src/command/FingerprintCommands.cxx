@@ -37,6 +37,8 @@
 #include "util/MimeType.hxx"
 #include "util/UriExtract.hxx"
 
+#include <fmt/format.h>
+
 class GetChromaprintCommand final
 	: public ThreadBackgroundCommand, ChromaprintDecoderClient, InputStreamHandler
 {
@@ -60,8 +62,8 @@ protected:
 	void Run() override;
 
 	void SendResponse(Response &r) noexcept override {
-		r.Format("chromaprint: %s\n",
-			 GetFingerprint().c_str());
+		r.Fmt(FMT_STRING("chromaprint: {}\n"),
+		      GetFingerprint());
 	}
 
 	void CancelThread() noexcept override {
@@ -72,12 +74,12 @@ protected:
 
 private:
 	void DecodeStream(InputStream &is, const DecoderPlugin &plugin);
-	bool DecodeStream(InputStream &is, const char *suffix,
+	bool DecodeStream(InputStream &is, std::string_view suffix,
 			  const DecoderPlugin &plugin);
 	void DecodeStream(InputStream &is);
-	bool DecodeContainer(const char *suffix, const DecoderPlugin &plugin);
-	bool DecodeContainer(const char *suffix);
-	bool DecodeFile(const char *suffix, InputStream &is,
+	bool DecodeContainer(std::string_view suffix, const DecoderPlugin &plugin);
+	bool DecodeContainer(std::string_view suffix);
+	bool DecodeFile(std::string_view suffix, InputStream &is,
 			const DecoderPlugin &plugin);
 	void DecodeFile();
 
@@ -124,23 +126,23 @@ decoder_check_plugin_mime(const DecoderPlugin &plugin,
 
 	const char *mime_type = is.GetMimeType();
 	return mime_type != nullptr &&
-		plugin.SupportsMimeType(GetMimeTypeBase(mime_type).c_str());
+		plugin.SupportsMimeType(GetMimeTypeBase(mime_type));
 }
 
 gcc_pure
 static bool
 decoder_check_plugin_suffix(const DecoderPlugin &plugin,
-			    const char *suffix) noexcept
+			    std::string_view suffix) noexcept
 {
 	assert(plugin.stream_decode != nullptr);
 
-	return suffix != nullptr && plugin.SupportsSuffix(suffix);
+	return !suffix.empty() && plugin.SupportsSuffix(suffix);
 }
 
 gcc_pure
 static bool
 decoder_check_plugin(const DecoderPlugin &plugin, const InputStream &is,
-		     const char *suffix) noexcept
+		     std::string_view suffix) noexcept
 {
 	return plugin.stream_decode != nullptr &&
 		(decoder_check_plugin_mime(plugin, is) ||
@@ -149,7 +151,7 @@ decoder_check_plugin(const DecoderPlugin &plugin, const InputStream &is,
 
 inline bool
 GetChromaprintCommand::DecodeStream(InputStream &is,
-				    const char *suffix,
+				    std::string_view suffix,
 				    const DecoderPlugin &plugin)
 {
 	if (!decoder_check_plugin(plugin, is, suffix))
@@ -164,8 +166,7 @@ GetChromaprintCommand::DecodeStream(InputStream &is,
 inline void
 GetChromaprintCommand::DecodeStream(InputStream &is)
 {
-	UriSuffixBuffer suffix_buffer;
-	const char *const suffix = uri_get_suffix(uri.c_str(), suffix_buffer);
+	const auto suffix = uri_get_suffix(uri);
 
 	decoder_plugins_try([this, &is, suffix](const DecoderPlugin &plugin){
 		return DecodeStream(is, suffix, plugin);
@@ -173,7 +174,7 @@ GetChromaprintCommand::DecodeStream(InputStream &is)
 }
 
 inline bool
-GetChromaprintCommand::DecodeContainer(const char *suffix,
+GetChromaprintCommand::DecodeContainer(std::string_view suffix,
 				       const DecoderPlugin &plugin)
 {
 	if (plugin.container_scan == nullptr ||
@@ -188,7 +189,7 @@ GetChromaprintCommand::DecodeContainer(const char *suffix,
 }
 
 inline bool
-GetChromaprintCommand::DecodeContainer(const char *suffix)
+GetChromaprintCommand::DecodeContainer(std::string_view suffix)
 {
 	return decoder_plugins_try([this, suffix](const DecoderPlugin &plugin){
 		return DecodeContainer(suffix, plugin);
@@ -196,7 +197,7 @@ GetChromaprintCommand::DecodeContainer(const char *suffix)
 }
 
 inline bool
-GetChromaprintCommand::DecodeFile(const char *suffix, InputStream &is,
+GetChromaprintCommand::DecodeFile(std::string_view suffix, InputStream &is,
 				  const DecoderPlugin &plugin)
 {
 	if (!plugin.SupportsSuffix(suffix))
@@ -223,9 +224,11 @@ GetChromaprintCommand::DecodeFile(const char *suffix, InputStream &is,
 inline void
 GetChromaprintCommand::DecodeFile()
 {
-	const char *suffix = uri_get_suffix(uri.c_str());
-	if (suffix == nullptr)
+	const char *_suffix = PathTraitsUTF8::GetFilenameSuffix(uri.c_str());
+	if (_suffix == nullptr)
 		return;
+
+	const std::string_view suffix{_suffix};
 
 	InputStreamPtr input_stream;
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2019 Max Kellermann <max.kellermann@gmail.com>
+ * Copyright 2011-2021 Max Kellermann <max.kellermann@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,7 +27,6 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "ToString.hxx"
 #include "Features.hxx"
 #include "SocketAddress.hxx"
@@ -85,7 +84,7 @@ ToString(SocketAddress address) noexcept
 #ifdef HAVE_UN
 	if (address.GetFamily() == AF_LOCAL)
 		/* return path of local socket */
-		return LocalAddressToString(*(const sockaddr_un *)address.GetAddress(),
+		return LocalAddressToString(address.CastTo<struct sockaddr_un>(),
 					    address.GetSize());
 #endif
 
@@ -116,4 +115,33 @@ ToString(SocketAddress address) noexcept
 	result.push_back(':');
 	result.append(serv);
 	return result;
+}
+
+std::string
+HostToString(SocketAddress address) noexcept
+{
+	if (address.IsNull())
+		return "null";
+
+#ifdef HAVE_UN
+	if (address.GetFamily() == AF_LOCAL)
+		/* return path of local socket */
+		return LocalAddressToString(address.CastTo<struct sockaddr_un>(),
+					    address.GetSize());
+#endif
+
+#if defined(HAVE_IPV6) && defined(IN6_IS_ADDR_V4MAPPED)
+	IPv4Address ipv4_buffer;
+	if (address.IsV4Mapped())
+		address = ipv4_buffer = address.UnmapV4();
+#endif
+
+	char host[NI_MAXHOST], serv[NI_MAXSERV];
+	int ret = getnameinfo(address.GetAddress(), address.GetSize(),
+			      host, sizeof(host), serv, sizeof(serv),
+			      NI_NUMERICHOST|NI_NUMERICSERV);
+	if (ret != 0)
+		return "unknown";
+
+	return host;
 }

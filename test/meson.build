@@ -28,6 +28,7 @@ gtest_dep = declare_dependency(
   compile_args: gtest_compile_args,
 )
 
+subdir('util')
 subdir('net')
 subdir('time')
 
@@ -39,24 +40,6 @@ executable(
     config_dep,
   ],
 )
-
-test('TestUtil', executable(
-  'TestUtil',
-  'TestCircularBuffer.cxx',
-  'TestDivideString.cxx',
-  'TestMimeType.cxx',
-  'TestSplitString.cxx',
-  'TestUriExtract.cxx',
-  'TestUriQueryParser.cxx',
-  'TestUriRelative.cxx',
-  'TestUriUtil.cxx',
-  'test_byte_reverse.cxx',
-  include_directories: inc,
-  dependencies: [
-    util_dep,
-    gtest_dep,
-  ],
-))
 
 test('TestRewindInputStream', executable(
   'TestRewindInputStream',
@@ -122,10 +105,10 @@ test('TestIcu', executable(
   ],
 ))
 
-if libavahi_client_dep.found()
+if zeroconf_dep.found()
   executable(
-    'run_avahi',
-    'run_avahi.cxx',
+    'RunZeroconf',
+    'RunZeroconf.cxx',
     'ShutdownHandler.cxx',
     include_directories: inc,
     dependencies: [
@@ -144,6 +127,7 @@ if enable_inotify
     '../src/db/update/InotifySource.cxx',
     include_directories: inc,
     dependencies: [
+      log_dep,
       event_dep,
       util_dep,
     ],
@@ -288,6 +272,7 @@ if enable_database
     '../src/LocateUri.cxx',
     include_directories: inc,
     dependencies: [
+      log_dep,
       tag_dep,
       storage_glue_dep,
       gtest_dep,
@@ -305,6 +290,7 @@ executable(
   '../src/TagSave.cxx',
   include_directories: inc,
   dependencies: [
+    log_dep,
     input_glue_dep,
     archive_glue_dep,
   ],
@@ -418,6 +404,7 @@ executable(
   'DumpDecoderClient.cxx',
   include_directories: inc,
   dependencies: [
+    log_dep,
     decoder_glue_dep,
     input_glue_dep,
     archive_glue_dep,
@@ -527,6 +514,7 @@ executable(
   'run_convert.cxx',
   include_directories: inc,
   dependencies: [
+    log_dep,
     pcm_dep,
     config_dep,
   ],

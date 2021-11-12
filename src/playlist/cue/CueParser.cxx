@@ -63,7 +63,7 @@ cue_next_token(StringView &src) noexcept
 	return cue_next_word(src);
 }
 
-static const StringView
+static StringView
 cue_next_value(StringView &src) noexcept
 {
 	src.StripLeft();
@@ -171,7 +171,6 @@ CueParser::Commit() noexcept
 
 	finished = std::move(previous);
 	previous = std::move(current);
-	current.reset();
 }
 
 void
@@ -302,10 +301,7 @@ CueParser::Get() noexcept
 		assert(current == nullptr);
 
 		finished = std::move(previous);
-		previous.reset();
 	}
 
-	auto result = std::move(finished);
-	finished.reset();
-	return result;
+	return std::move(finished);
 }

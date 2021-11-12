@@ -44,6 +44,9 @@ public:
 		vorbis_info_clear(&vi);
 	}
 
+	VorbisEncoder(const VorbisEncoder &) = delete;
+	VorbisEncoder &operator=(const VorbisEncoder &) = delete;
+
 	/* virtual methods from class Encoder */
 	void End() override {
 		PreTag();
@@ -225,7 +228,7 @@ VorbisEncoder::SendTag(const Tag &tag)
 
 	/* reset ogg_stream_state and begin a new stream */
 
-	stream.Reinitialize(GenerateOggSerial());
+	stream.Reinitialize(GenerateSerial());
 
 	/* send that vorbis_comment to the ogg_stream_state */
 

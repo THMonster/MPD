@@ -24,6 +24,7 @@
 #include "fs/Traits.hxx"
 #include "song/DetachedSong.hxx"
 #include "util/UriExtract.hxx"
+#include "util/UriUtil.hxx"
 
 #include <algorithm>
 #include <string>
@@ -47,6 +48,9 @@ merge_song_metadata(DetachedSong &add, const DetachedSong &base) noexcept
 	if (add.GetEndTime().IsZero()) {
 		add.SetEndTime(base.GetEndTime());
 	}
+
+	if (!add.GetAudioFormat().IsDefined())
+		add.SetAudioFormat(base.GetAudioFormat());
 }
 
 static bool
@@ -93,8 +97,14 @@ playlist_check_translate_song(DetachedSong &song, std::string_view base_uri,
 #endif
 
 	if (base_uri.data() != nullptr &&
-	    !PathTraitsUTF8::IsAbsoluteOrHasScheme(uri))
+	    !PathTraitsUTF8::IsAbsoluteOrHasScheme(uri)) {
 		song.SetURI(PathTraitsUTF8::Build(base_uri, uri));
+		uri = song.GetURI();
+	}
+
+	/* Remove dot segments */
+	std::string new_uri = uri_squash_dot_segments(uri);
+	song.SetURI(std::move(new_uri));
 
 	return playlist_check_load_song(song, loader);
 }

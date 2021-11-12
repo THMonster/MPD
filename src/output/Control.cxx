@@ -20,6 +20,8 @@
 #include "Control.hxx"
 #include "Filtered.hxx"
 #include "Client.hxx"
+#include "Domain.hxx"
+#include "lib/fmt/ExceptionFormatter.hxx"
 #include "mixer/MixerControl.hxx"
 #include "config/Block.hxx"
 #include "Log.hxx"
@@ -31,36 +33,32 @@
 static constexpr PeriodClock::Duration REOPEN_AFTER = std::chrono::seconds(10);
 
 AudioOutputControl::AudioOutputControl(std::unique_ptr<FilteredAudioOutput> _output,
-				       AudioOutputClient &_client) noexcept
+				       AudioOutputClient &_client,
+				       const ConfigBlock &block)
 	:output(std::move(_output)),
 	 name(output->GetName()),
 	 client(_client),
-	 thread(BIND_THIS_METHOD(Task))
+	 thread(BIND_THIS_METHOD(Task)),
+	 tags(block.GetBlockValue("tags", true)),
+	 always_on(block.GetBlockValue("always_on", false)),
+	 enabled(block.GetBlockValue("enabled", true))
 {
 }
 
-AudioOutputControl::AudioOutputControl(AudioOutputControl *_output,
+AudioOutputControl::AudioOutputControl(AudioOutputControl &&src,
 				       AudioOutputClient &_client) noexcept
-	:output(_output->Steal()),
+	:output(src.Steal()),
 	 name(output->GetName()),
 	 client(_client),
-	 thread(BIND_THIS_METHOD(Task))
+	 thread(BIND_THIS_METHOD(Task)),
+	 tags(src.tags),
+	 always_on(src.always_on)
 {
-     tags =_output->tags;
-	 always_on=_output->always_on;
 }
 
 AudioOutputControl::~AudioOutputControl() noexcept
 {
 	StopThread();
-}
-
-void
-AudioOutputControl::Configure(const ConfigBlock &block)
-{
-	tags = block.GetBlockValue("tags", true);
-	always_on = block.GetBlockValue("always_on", false);
-	enabled = block.GetBlockValue("enabled", true);
 }
 
 std::unique_ptr<FilteredAudioOutput>
@@ -286,9 +284,9 @@ AudioOutputControl::Open(std::unique_lock<Mutex> &lock,
 		try {
 			mixer_open(output->mixer);
 		} catch (...) {
-			FormatError(std::current_exception(),
-				    "Failed to open mixer for '%s'",
-				    GetName());
+			FmtError(output_domain,
+				 "Failed to open mixer for '{}': {}",
+				 GetName(), std::current_exception());
 		}
 	}
 

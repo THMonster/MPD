@@ -18,7 +18,7 @@
  */
 
 #include "Id3Load.hxx"
-#include "Riff.hxx"
+#include "RiffId3.hxx"
 #include "Aiff.hxx"
 #include "input/InputStream.hxx"
 
@@ -28,7 +28,7 @@
 
 static constexpr size_t ID3V1_SIZE = 128;
 
-gcc_pure
+[[gnu::pure]]
 static inline bool
 tag_is_id3v1(struct id3_tag *tag) noexcept
 {

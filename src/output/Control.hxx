@@ -26,7 +26,6 @@
 #include "thread/Mutex.hxx"
 #include "thread/Cond.hxx"
 #include "system/PeriodClock.hxx"
-#include "util/Compiler.h"
 
 #include <cstdint>
 #include <exception>
@@ -152,13 +151,13 @@ class AudioOutputControl {
 	 * default is true, but it may be configured to false to
 	 * suppress sending tags to the output.
 	 */
-	bool tags;
+	const bool tags;
 
 	/**
 	 * Shall this output always play something (i.e. silence),
 	 * even when playback is stopped?
 	 */
-	bool always_on;
+	const bool always_on;
 
 	/**
 	 * Has the user enabled this device?
@@ -250,10 +249,18 @@ public:
 	 */
 	mutable Mutex mutex;
 
+	/**
+	 * Throws on error.
+	 */
 	AudioOutputControl(std::unique_ptr<FilteredAudioOutput> _output,
-			   AudioOutputClient &_client) noexcept;
+			   AudioOutputClient &_client,
+			   const ConfigBlock &block);
 
-	AudioOutputControl(AudioOutputControl *_outputControl,
+	/**
+	 * Move the contents of an existing instance, and convert that
+	 * existing instance to a "dummy" output.
+	 */
+	AudioOutputControl(AudioOutputControl &&src,
 			   AudioOutputClient &_client) noexcept;
 
 	~AudioOutputControl() noexcept;
@@ -261,25 +268,20 @@ public:
 	AudioOutputControl(const AudioOutputControl &) = delete;
 	AudioOutputControl &operator=(const AudioOutputControl &) = delete;
 
-	/**
-	 * Throws on error.
-	 */
-	void Configure(const ConfigBlock &block);
-
-	gcc_pure
+	[[gnu::pure]]
 	const char *GetName() const noexcept;
 
-	gcc_pure
+	[[gnu::pure]]
 	const char *GetPluginName() const noexcept;
 
-	gcc_pure
+	[[gnu::pure]]
 	const char *GetLogName() const noexcept;
 
 	AudioOutputClient &GetClient() noexcept {
 		return client;
 	}
 
-	gcc_pure
+	[[gnu::pure]]
 	Mixer *GetMixer() const noexcept;
 
 	bool IsDummy() const noexcept {
@@ -451,10 +453,10 @@ public:
 	 *
 	 * Caller must lock the mutex.
 	 */
-	gcc_pure
+	[[gnu::pure]]
 	bool IsChunkConsumed(const MusicChunk &chunk) const noexcept;
 
-	gcc_pure
+	[[gnu::pure]]
 	bool LockIsChunkConsumed(const MusicChunk &chunk) const noexcept;
 
 	/**

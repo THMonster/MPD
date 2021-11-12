@@ -62,7 +62,10 @@ option('dsd', type: 'boolean', value: true, description: 'Support the DSD audio 
 #
 
 option('database', type: 'boolean', value: true, description: 'enable support for the music database')
-option('upnp', type: 'feature', description: 'UPnP client support')
+option('upnp', type: 'combo',
+       choices: ['auto', 'pupnp', 'npupnp', 'disabled'],
+       value: 'auto',
+       description: 'UPnP client support')
 option('libmpdclient', type: 'feature', description: 'libmpdclient support (for the proxy database plugin)')
 
 #
@@ -134,6 +137,7 @@ option('gme', type: 'feature', description: 'Game Music Emulator decoder plugin'
 option('mad', type: 'feature', description: 'MP3 decoder using libmad')
 option('mikmod', type: 'feature', description: 'MikMod decoder plugin')
 option('modplug', type: 'feature', description: 'Modplug decoder plugin')
+option('openmpt', type: 'feature', description: 'OpenMPT decoder plugin')
 option('mpcdec', type: 'feature', description: 'Musepack decoder plugin')
 option('mpg123', type: 'feature', description: 'MP3 decoder using libmpg123')
 option('opus', type: 'feature', description: 'Opus decoder plugin')
@@ -173,9 +177,11 @@ option('jack', type: 'feature', description: 'JACK output plugin')
 option('openal', type: 'feature', description: 'OpenAL output plugin')
 option('oss', type: 'feature', description: 'Open Sound System support')
 option('pipe', type: 'boolean', value: true, description: 'Pipe output plugin')
+option('pipewire', type: 'feature', description: 'PipeWire support')
 option('pulse', type: 'feature', description: 'PulseAudio support')
 option('recorder', type: 'boolean', value: true, description: 'Recorder output plugin')
 option('shout', type: 'feature', description: 'Shoutcast streaming support using libshout')
+option('snapcast', type: 'boolean', value: true, description: 'Snapcast output plugin')
 option('sndio', type: 'feature', description: 'sndio output plugin')
 option('solaris_output', type: 'feature', description: 'Solaris /dev/audio support')
 

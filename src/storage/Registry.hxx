@@ -38,6 +38,10 @@ gcc_nonnull_all gcc_pure
 const StoragePlugin *
 GetStoragePluginByName(const char *name) noexcept;
 
+gcc_nonnull_all gcc_pure
+const StoragePlugin *
+GetStoragePluginByUri(const char *uri) noexcept;
+
 gcc_nonnull_all
 std::unique_ptr<Storage>
 CreateStorageURI(EventLoop &event_loop, const char *uri);

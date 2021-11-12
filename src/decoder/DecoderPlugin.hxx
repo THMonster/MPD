@@ -20,11 +20,10 @@
 #ifndef MPD_DECODER_PLUGIN_HXX
 #define MPD_DECODER_PLUGIN_HXX
 
-#include "util/Compiler.h"
-
 #include <forward_list>  // IWYU pragma: export
 #include <set>
 #include <string>
+#include <string_view>
 
 struct ConfigBlock;
 class InputStream;
@@ -142,34 +141,34 @@ struct DecoderPlugin {
 		 scan_stream(_scan_stream) {}
 
 	constexpr auto WithInit(bool (*_init)(const ConfigBlock &block),
-				void (*_finish)() noexcept = nullptr) noexcept {
+				void (*_finish)() noexcept = nullptr) const noexcept {
 		auto copy = *this;
 		copy.init = _init;
 		copy.finish = _finish;
 		return copy;
 	}
 
-	constexpr auto WithContainer(std::forward_list<DetachedSong> (*_container_scan)(Path path_fs)) noexcept {
+	constexpr auto WithContainer(std::forward_list<DetachedSong> (*_container_scan)(Path path_fs)) const noexcept {
 		auto copy = *this;
 		copy.container_scan = _container_scan;
 		return copy;
 	}
 
 	constexpr auto WithProtocols(std::set<std::string> (*_protocols)() noexcept,
-				     void (*_uri_decode)(DecoderClient &client, const char *uri)) noexcept {
+				     void (*_uri_decode)(DecoderClient &client, const char *uri)) const noexcept {
 		auto copy = *this;
 		copy.protocols = _protocols;
 		copy.uri_decode = _uri_decode;
 		return copy;
 	}
 
-	constexpr auto WithSuffixes(const char *const*_suffixes) noexcept {
+	constexpr auto WithSuffixes(const char *const*_suffixes) const noexcept {
 		auto copy = *this;
 		copy.suffixes = _suffixes;
 		return copy;
 	}
 
-	constexpr auto WithMimeTypes(const char *const*_mime_types) noexcept {
+	constexpr auto WithMimeTypes(const char *const*_mime_types) const noexcept {
 		auto copy = *this;
 		copy.mime_types = _mime_types;
 		return copy;
@@ -245,22 +244,22 @@ struct DecoderPlugin {
 		return container_scan(path, tnum);
 	}
 
-	gcc_pure
+	[[gnu::pure]]
 	bool SupportsUri(const char *uri) const noexcept;
 
 	/**
 	 * Does the plugin announce the specified file name suffix?
 	 */
-	gcc_pure gcc_nonnull_all
-	bool SupportsSuffix(const char *suffix) const noexcept;
+	[[gnu::pure]]
+	bool SupportsSuffix(std::string_view suffix) const noexcept;
 
 	/**
 	 * Does the plugin announce the specified MIME type?
 	 */
-	gcc_pure gcc_nonnull_all
-	bool SupportsMimeType(const char *mime_type) const noexcept;
+	[[gnu::pure]]
+	bool SupportsMimeType(std::string_view mime_type) const noexcept;
 
-	bool SupportsContainerSuffix(const char *suffix) const noexcept {
+	bool SupportsContainerSuffix(std::string_view suffix) const noexcept {
 		return container_scan != nullptr && SupportsSuffix(suffix);
 	}
 };

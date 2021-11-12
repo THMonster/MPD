@@ -17,27 +17,15 @@ libmpdclient = MesonProject(
     'lib/libmpdclient.a',
 )
 
-libogg = AutotoolsProject(
+libogg = CmakeProject(
     'http://downloads.xiph.org/releases/ogg/libogg-1.3.4.tar.xz',
     'c163bc12bc300c401b6aa35907ac682671ea376f13ae0969a220f7ddf71893fe',
     'lib/libogg.a',
     [
-        '--disable-shared', '--enable-static',
+        '-DBUILD_SHARED_LIBS=OFF',
+        '-DINSTALL_DOCS=OFF',
+        '-DINSTALL_CMAKE_PACKAGE_MODULE=OFF',
     ],
-)
-
-libvorbis = AutotoolsProject(
-    'http://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.xz',
-    'b33cc4934322bcbf6efcbacf49e3ca01aadbea4114ec9589d1b1e9d20f72954b',
-    'lib/libvorbis.a',
-    [
-        '--disable-shared', '--enable-static',
-    ],
-
-    edits={
-        # this option is not understood by clang
-        'configure': lambda data: data.replace('-mno-ieee-fp', ' '),
-    }
 )
 
 opus = AutotoolsProject(
@@ -123,18 +111,31 @@ libmodplug = AutotoolsProject(
     ],
 )
 
+libopenmpt = AutotoolsProject(
+    'https://lib.openmpt.org/files/libopenmpt/src/libopenmpt-0.5.12+release.autotools.tar.gz',
+    '892aea7a599b5d21842bebf463b5aafdad5711be7008dd84401920c6234820af',
+    'lib/libopenmpt.a',
+    [
+        '--disable-shared', '--enable-static',
+        '--disable-openmpt123',
+        '--without-mpg123', '--without-ogg', '--without-vorbis', '--without-vorbisfile',
+        '--without-portaudio', '--without-portaudiocpp', '--without-sndfile',
+    ],
+    base='libopenmpt-0.5.12+release.autotools',
+)
+
 wildmidi = CmakeProject(
-    'https://codeload.github.com/Mindwerks/wildmidi/tar.gz/wildmidi-0.4.3',
-    '498e5a96455bb4b91b37188ad6dcb070824e92c44f5ed452b90adbaec8eef3c5',
+    'https://codeload.github.com/Mindwerks/wildmidi/tar.gz/wildmidi-0.4.4',
+    '6f267c8d331e9859906837e2c197093fddec31829d2ebf7b958cf6b7ae935430',
     'lib/libWildMidi.a',
     [
         '-DBUILD_SHARED_LIBS=OFF',
         '-DWANT_PLAYER=OFF',
         '-DWANT_STATIC=ON',
     ],
-    base='wildmidi-wildmidi-0.4.3',
+    base='wildmidi-wildmidi-0.4.4',
     name='wildmidi',
-    version='0.4.3',
+    version='0.4.4',
 )
 
 gme = CmakeProject(
@@ -150,8 +151,8 @@ gme = CmakeProject(
 )
 
 ffmpeg = FfmpegProject(
-    'http://ffmpeg.org/releases/ffmpeg-4.4.tar.xz',
-    '06b10a183ce5371f915c6bb15b7b1fffbe046e8275099c96affc29e17645d909',
+    'http://ffmpeg.org/releases/ffmpeg-4.4.1.tar.xz',
+    'eadbad9e9ab30b25f5520fbfde99fae4a92a1ae3c0257a8d68569a4651e30e02',
     'lib/libavcodec.a',
     [
         '--disable-shared', '--enable-static',
@@ -379,51 +380,44 @@ ffmpeg = FfmpegProject(
 )
 
 openssl = OpenSSLProject(
-    'https://www.openssl.org/source/openssl-3.0.0-beta2.tar.gz',
-    'e76ab22879201b12f014393ee4becec7f264d8f6955b1036839128002868df71',
+    'https://www.openssl.org/source/openssl-3.0.0.tar.gz',
+    '59eedfcb46c25214c9bd37ed6078297b4df01d012267fe9e9eee31f61bc70536',
     'include/openssl/ossl_typ.h',
 )
 
-curl = AutotoolsProject(
-    'https://curl.se/download/curl-7.78.0.tar.xz',
-    'be42766d5664a739c3974ee3dfbbcbe978a4ccb1fe628bb1d9b59ac79e445fb5',
+curl = CmakeProject(
+    'https://curl.se/download/curl-7.79.1.tar.xz',
+    '0606f74b1182ab732a17c11613cbbaf7084f2e6cca432642d0e3ad7c224c3689',
     'lib/libcurl.a',
     [
-        '--disable-shared', '--enable-static',
-        '--disable-debug',
-        '--enable-http',
-        '--enable-ipv6',
-        '--disable-ftp', '--disable-file',
-        '--disable-ldap', '--disable-ldaps',
-        '--disable-rtsp', '--disable-proxy', '--disable-dict', '--disable-telnet',
-        '--disable-tftp', '--disable-pop3', '--disable-imap', '--disable-smtp',
-        '--disable-smb',
-        '--disable-gopher',
-        '--disable-manual',
-        '--disable-threaded-resolver', '--disable-verbose', '--disable-sspi',
-        '--disable-crypto-auth', '--disable-ntlm-wb', '--disable-tls-srp', '--disable-cookies',
-        '--disable-doh',
-        '--disable-mime',
-        '--disable-netrc',
-        '--disable-progress-meter',
-        '--disable-alt-svc',
-        '--without-gnutls', '--without-nss', '--without-libssh2',
-
-        # native Windows SSL/TLS support, option ignored on non-Windows builds
-        '--with-schannel',
+        '-DBUILD_CURL_EXE=OFF',
+        '-DBUILD_SHARED_LIBS=OFF',
+        '-DCURL_DISABLE_VERBOSE_STRINGS=ON',
+        '-DCURL_DISABLE_LDAP=ON',
+        '-DCURL_DISABLE_TELNET=ON',
+        '-DCURL_DISABLE_DICT=ON',
+        '-DCURL_DISABLE_FILE=ON',
+        '-DCURL_DISABLE_FTP=ON',
+        '-DCURL_DISABLE_TFTP=ON',
+        '-DCURL_DISABLE_LDAPS=ON',
+        '-DCURL_DISABLE_RTSP=ON',
+        '-DCURL_DISABLE_PROXY=ON',
+        '-DCURL_DISABLE_POP3=ON',
+        '-DCURL_DISABLE_IMAP=ON',
+        '-DCURL_DISABLE_SMTP=ON',
+        '-DCURL_DISABLE_GOPHER=ON',
+        '-DCURL_DISABLE_COOKIES=ON',
+        '-DCURL_DISABLE_CRYPTO_AUTH=ON',
+        '-DCURL_DISABLE_ALTSVC=ON',
+        '-DCMAKE_USE_LIBSSH2=OFF',
+        '-DCURL_WINDOWS_SSPI=OFF',
+        '-DCURL_DISABLE_NTLM=ON',
+        '-DBUILD_TESTING=OFF',
     ],
-
+    windows_configure_args=[
+        '-DCMAKE_USE_SCHANNEL=ON',
+    ],
     patches='src/lib/curl/patches',
-)
-
-libexpat = AutotoolsProject(
-    'https://github.com/libexpat/libexpat/releases/download/R_2_2_9/expat-2.2.9.tar.bz2',
-    'f1063084dc4302a427dabcca499c8312b3a32a29b7d2506653ecc8f950a9a237',
-    'lib/libexpat.a',
-    [
-        '--disable-shared', '--enable-static',
-        '--without-docbook',
-    ],
 )
 
 libnfs = AutotoolsProject(
@@ -451,7 +445,7 @@ jack = JackProject(
 )
 
 boost = BoostProject(
-    'https://boostorg.jfrog.io/artifactory/main/release/1.76.0/source/boost_1_76_0.tar.bz2',
-    'f0397ba6e982c4450f27bf32a2a83292aba035b827a5623a14636ea583318c41',
+    'https://boostorg.jfrog.io/artifactory/main/release/1.77.0/source/boost_1_77_0.tar.bz2',
+    'fc9f85fc030e233142908241af7a846e60630aa7388de9a5fafb1f3a26840854',
     'include/boost/version.hpp',
 )

@@ -24,7 +24,6 @@
 #include "event/Loop.hxx"
 #include "event/Thread.hxx"
 #include "event/MaskMonitor.hxx"
-#include "util/Compiler.h"
 
 #ifdef ENABLE_SYSTEMD_DAEMON
 #include "lib/systemd/Watchdog.hxx"
@@ -44,6 +43,9 @@ class NeighborGlue;
 #include "db/Ptr.hxx"
 class Storage;
 class UpdateService;
+#ifdef ENABLE_INOTIFY
+class InotifyUpdate;
+#endif
 #endif
 
 #include <memory>
@@ -121,6 +123,10 @@ struct Instance final
 	Storage *storage = nullptr;
 
 	UpdateService *update = nullptr;
+
+#ifdef ENABLE_INOTIFY
+	std::unique_ptr<InotifyUpdate> inotify_update;
+#endif
 #endif
 
 #ifdef ENABLE_CURL
@@ -168,7 +174,7 @@ struct Instance final
 	 * Find a #Partition with the given name.  Returns nullptr if
 	 * no such partition was found.
 	 */
-	gcc_pure
+	[[gnu::pure]]
 	Partition *FindPartition(const char *name) noexcept;
 
 	void DeletePartition(Partition &partition) noexcept;
@@ -194,7 +200,7 @@ struct Instance final
 #endif
 
 #ifdef ENABLE_SQLITE
-	bool HasStickerDatabase() noexcept {
+	bool HasStickerDatabase() const noexcept {
 		return sticker_database != nullptr;
 	}
 #endif

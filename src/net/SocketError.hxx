@@ -30,7 +30,6 @@
 #ifndef SOCKET_ERROR_HXX
 #define SOCKET_ERROR_HXX
 
-#include "util/Compiler.h"
 #include "system/Error.hxx"
 
 #ifdef _WIN32
@@ -41,7 +40,7 @@ typedef DWORD socket_error_t;
 typedef int socket_error_t;
 #endif
 
-gcc_pure
+[[gnu::pure]]
 static inline socket_error_t
 GetSocketError() noexcept
 {
@@ -128,8 +127,7 @@ IsSocketErrorAcceptWouldBlock(socket_error_t code) noexcept
 #endif
 }
 
-gcc_const
-static inline bool
+constexpr bool
 IsSocketErrorInterruped(socket_error_t code) noexcept
 {
 #ifdef _WIN32
@@ -139,8 +137,7 @@ IsSocketErrorInterruped(socket_error_t code) noexcept
 #endif
 }
 
-gcc_const
-static inline bool
+constexpr bool
 IsSocketErrorClosed(socket_error_t code) noexcept
 {
 #ifdef _WIN32
@@ -171,8 +168,8 @@ public:
 	}
 };
 
-gcc_const
-static inline std::system_error
+[[gnu::pure]]
+static inline auto
 MakeSocketError(socket_error_t code, const char *msg) noexcept
 {
 #ifdef _WIN32
@@ -182,8 +179,8 @@ MakeSocketError(socket_error_t code, const char *msg) noexcept
 #endif
 }
 
-gcc_pure
-static inline std::system_error
+[[gnu::pure]]
+static inline auto
 MakeSocketError(const char *msg) noexcept
 {
 	return MakeSocketError(GetSocketError(), msg);

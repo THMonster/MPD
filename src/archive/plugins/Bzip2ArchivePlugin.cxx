@@ -71,6 +71,9 @@ public:
 			 Mutex &mutex);
 	~Bzip2InputStream() noexcept override;
 
+	Bzip2InputStream(const Bzip2InputStream &) = delete;
+	Bzip2InputStream &operator=(const Bzip2InputStream &) = delete;
+
 	/* virtual methods from InputStream */
 	[[nodiscard]] bool IsEOF() const noexcept override;
 	size_t Read(std::unique_lock<Mutex> &lock,
@@ -177,7 +180,7 @@ Bzip2InputStream::IsEOF() const noexcept
 
 /* exported structures */
 
-static const char *const bz2_extensions[] = {
+static constexpr const char *bz2_extensions[] = {
 	"bz2",
 	nullptr
 };

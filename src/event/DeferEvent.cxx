@@ -21,13 +21,19 @@
 #include "Loop.hxx"
 
 void
-DeferEvent::Cancel() noexcept
+DeferEvent::Schedule() noexcept
 {
-	loop.RemoveDeferred(*this);
+	if (!IsPending())
+		loop.AddDefer(*this);
+
+	assert(IsPending());
 }
 
 void
-DeferEvent::Schedule() noexcept
+DeferEvent::ScheduleIdle() noexcept
 {
-	loop.AddDeferred(*this);
+	if (!IsPending())
+		loop.AddIdle(*this);
+
+	assert(IsPending());
 }

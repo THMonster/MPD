@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2019 Max Kellermann <max.kellermann@gmail.com>
+ * Copyright 2011-2021 Max Kellermann <max.kellermann@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,8 +30,6 @@
 #ifndef NET_TO_STRING_HXX
 #define NET_TO_STRING_HXX
 
-#include "util/Compiler.h"
-
 #include <string>
 
 class SocketAddress;
@@ -40,8 +38,16 @@ class SocketAddress;
  * Converts the specified socket address into a string in the form
  * "IP:PORT".
  */
-gcc_pure
+[[gnu::pure]]
 std::string
 ToString(SocketAddress address) noexcept;
+
+/**
+ * Generates the string representation of a #SocketAddress into the
+ * specified buffer, without the port number.
+ */
+[[gnu::pure]]
+std::string
+HostToString(SocketAddress address) noexcept;
 
 #endif

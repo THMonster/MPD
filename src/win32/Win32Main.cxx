@@ -20,7 +20,8 @@
 #include "Main.hxx"
 #include "util/Compiler.h"
 #include "Instance.hxx"
-#include "system/FatalError.hxx"
+#include "system/Error.hxx"
+#include "Log.hxx"
 
 #include <cstdlib>
 #include <atomic>
@@ -76,17 +77,19 @@ service_dispatcher([[maybe_unused]] DWORD control, [[maybe_unused]] DWORD event_
 
 static void WINAPI
 service_main([[maybe_unused]] DWORD argc, [[maybe_unused]] LPTSTR argv[])
-{
+try {
 	service_handle =
 		RegisterServiceCtrlHandlerEx(service_name,
 					     service_dispatcher, nullptr);
 
 	if (service_handle == 0)
-		FatalSystemError("RegisterServiceCtrlHandlerEx() failed");
+		throw MakeLastError("RegisterServiceCtrlHandlerEx() failed");
 
 	service_notify_status(SERVICE_START_PENDING);
 	mpd_main(service_argc, service_argv);
 	service_notify_status(SERVICE_STOPPED);
+} catch (...) {
+	LogError(std::current_exception());
 }
 
 static BOOL WINAPI
@@ -134,7 +137,7 @@ int win32_main(int argc, char *argv[])
 		return mpd_main(argc, argv);
 	}
 
-	FatalSystemError("StartServiceCtrlDispatcher() failed", error_code);
+	throw MakeLastError(error_code, "StartServiceCtrlDispatcher() failed");
 }
 
 void win32_app_started()

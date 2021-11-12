@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 Max Kellermann <max.kellermann@gmail.com>
+ * Copyright 2012-2020 Max Kellermann <max.kellermann@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,8 +30,7 @@
 #ifndef FILE_DESCRIPTOR_HXX
 #define FILE_DESCRIPTOR_HXX
 
-#include "util/Compiler.h"
-
+#include <cstddef>
 #include <utility>
 
 #include <unistd.h>
@@ -75,25 +74,25 @@ public:
 	/**
 	 * Ask the kernel whether this is a valid file descriptor.
 	 */
-	gcc_pure
+	[[gnu::pure]]
 	bool IsValid() const noexcept;
 
 	/**
 	 * Ask the kernel whether this is a regular file.
 	 */
-	gcc_pure
+	[[gnu::pure]]
 	bool IsRegularFile() const noexcept;
 
 	/**
 	 * Ask the kernel whether this is a pipe.
 	 */
-	gcc_pure
+	[[gnu::pure]]
 	bool IsPipe() const noexcept;
 
 	/**
 	 * Ask the kernel whether this is a socket descriptor.
 	 */
-	gcc_pure
+	[[gnu::pure]]
 	bool IsSocket() const noexcept;
 #endif
 
@@ -181,7 +180,7 @@ public:
 	 * Duplicate the file descriptor onto the given file descriptor.
 	 */
 	bool Duplicate(FileDescriptor new_fd) const noexcept {
-		return ::dup2(Get(), new_fd.Get()) == 0;
+		return ::dup2(Get(), new_fd.Get()) != -1;
 	}
 
 	/**
@@ -221,7 +220,7 @@ public:
 		return lseek(Get(), offset, SEEK_CUR);
 	}
 
-	gcc_pure
+	[[gnu::pure]]
 	off_t Tell() const noexcept {
 		return lseek(Get(), 0, SEEK_CUR);
 	}
@@ -229,10 +228,10 @@ public:
 	/**
 	 * Returns the size of the file in bytes, or -1 on error.
 	 */
-	gcc_pure
+	[[gnu::pure]]
 	off_t GetSize() const noexcept;
 
-	ssize_t Read(void *buffer, size_t length) noexcept {
+	ssize_t Read(void *buffer, std::size_t length) noexcept {
 		return ::read(fd, buffer, length);
 	}
 
@@ -240,9 +239,9 @@ public:
 	 * Read until all of the given buffer has been filled.  Throws
 	 * on error.
 	 */
-	void FullRead(void *buffer, size_t length);
+	void FullRead(void *buffer, std::size_t length);
 
-	ssize_t Write(const void *buffer, size_t length) noexcept {
+	ssize_t Write(const void *buffer, std::size_t length) noexcept {
 		return ::write(fd, buffer, length);
 	}
 
@@ -250,7 +249,7 @@ public:
 	 * Write until all of the given buffer has been written.
 	 * Throws on error.
 	 */
-	void FullWrite(const void *buffer, size_t length);
+	void FullWrite(const void *buffer, std::size_t length);
 
 #ifndef _WIN32
 	int Poll(short events, int timeout) const noexcept;
@@ -258,7 +257,7 @@ public:
 	int WaitReadable(int timeout) const noexcept;
 	int WaitWritable(int timeout) const noexcept;
 
-	gcc_pure
+	[[gnu::pure]]
 	bool IsReadyForWriting() const noexcept;
 #endif
 };

@@ -21,7 +21,6 @@
 #include "../OutputAPI.hxx"
 #include "thread/SafeSingleton.hxx"
 #include "system/Error.hxx"
-#include "util/DivideString.hxx"
 #include "util/IterableSplitString.hxx"
 #include "util/RuntimeError.hxx"
 #include "util/Domain.hxx"
@@ -42,6 +41,9 @@ public:
 	~AoInit() noexcept {
 		ao_shutdown();
 	}
+
+	AoInit(const AoInit &) = delete;
+	AoInit &operator=(const AoInit &) = delete;
 };
 
 class AoOutput final : AudioOutput, SafeSingleton<AoInit> {
@@ -54,6 +56,9 @@ class AoOutput final : AudioOutput, SafeSingleton<AoInit> {
 
 	explicit AoOutput(const ConfigBlock &block);
 	~AoOutput() override;
+
+	AoOutput(const AoOutput &) = delete;
+	AoOutput &operator=(const AoOutput &) = delete;
 
 public:
 	static AudioOutput *Create(EventLoop &, const ConfigBlock &block) {
@@ -117,8 +122,8 @@ AoOutput::AoOutput(const ConfigBlock &block)
 	if (ai == nullptr)
 		throw std::runtime_error("problems getting driver info");
 
-	FormatDebug(ao_output_domain, "using ao driver \"%s\" for \"%s\"\n",
-		    ai->short_name, block.GetBlockValue("name", nullptr));
+	FmtDebug(ao_output_domain, "using ao driver \"{}\" for \"{}\"\n",
+		 ai->short_name, block.GetBlockValue("name", nullptr));
 
 	value = block.GetBlockValue("options", nullptr);
 	if (value != nullptr) {

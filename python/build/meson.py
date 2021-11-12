@@ -1,4 +1,5 @@
 import os.path, subprocess, sys
+import platform
 
 from build.project import Project
 
@@ -34,41 +35,46 @@ def make_cross_file(toolchain):
     path = os.path.join(toolchain.build_path, 'meson.cross')
     os.makedirs(toolchain.build_path, exist_ok=True)
     with open(path, 'w') as f:
-        f.write("""
+        f.write(f"""
 [binaries]
-c = '%s'
-cpp = '%s'
-ar = '%s'
-strip = '%s'
-pkgconfig = '%s'
-%s
+c = '{toolchain.cc}'
+cpp = '{toolchain.cxx}'
+ar = '{toolchain.ar}'
+strip = '{toolchain.strip}'
+pkgconfig = '{toolchain.pkg_config}'
+""")
 
+        if toolchain.is_windows and platform.system() != 'Windows':
+            f.write(f"windres = '{toolchain.windres}'\n")
+
+            # Run unit tests with WINE when cross-building for Windows
+            print("exe_wrapper = 'wine'", file=f)
+
+        f.write(f"""
 [properties]
-root = '%s'
+root = '{toolchain.install_prefix}'
 
-c_args = %s
-c_link_args = %s
+[built-in options]
+c_args = {repr((toolchain.cppflags + ' ' + toolchain.cflags).split())}
+c_link_args = {repr(toolchain.ldflags.split() + toolchain.libs.split())}
 
-cpp_args = %s
-cpp_link_args = %s
+cpp_args = {repr((toolchain.cppflags + ' ' + toolchain.cxxflags).split())}
+cpp_link_args = {repr(toolchain.ldflags.split() + toolchain.libs.split())}
+""")
 
+        if 'android' in toolchain.arch:
+            f.write("""
 # Keep Meson from executing Android-x86 test binariees
 needs_exe_wrapper = true
+""")
 
+        f.write(f"""
 [host_machine]
-system = '%s'
-cpu_family = '%s'
-cpu = '%s'
-endian = '%s'
-            """ % (toolchain.cc, toolchain.cxx, toolchain.ar, toolchain.strip,
-                   toolchain.pkg_config,
-                   windres,
-                   toolchain.install_prefix,
-                   repr((toolchain.cppflags + ' ' + toolchain.cflags).split()),
-                   repr(toolchain.ldflags.split() + toolchain.libs.split()),
-                   repr((toolchain.cppflags + ' ' + toolchain.cxxflags).split()),
-                   repr(toolchain.ldflags.split() + toolchain.libs.split()),
-                   system, cpu_family, cpu, endian))
+system = '{system}'
+cpu_family = '{cpu_family}'
+cpu = '{cpu}'
+endian = '{endian}'
+""")
     return path
 
 def configure(toolchain, src, build, args=()):
@@ -78,11 +84,6 @@ def configure(toolchain, src, build, args=()):
         src, build,
 
         '--prefix', toolchain.install_prefix,
-
-        # this is necessary because Meson uses Debian's build machine
-        # MultiArch path (e.g. "lib/x86_64-linux-gnu") for cross
-        # builds, which is obviously wrong
-        '--libdir', 'lib',
 
         '--buildtype', 'plain',
 
@@ -110,7 +111,7 @@ class MesonProject(Project):
         configure(toolchain, src, build, self.configure_args)
         return build
 
-    def build(self, toolchain):
+    def _build(self, toolchain):
         build = self.configure(toolchain)
         subprocess.check_call(['ninja', 'install'],
                               cwd=build, env=toolchain.env)

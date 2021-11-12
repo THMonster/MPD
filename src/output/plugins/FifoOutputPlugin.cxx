@@ -49,6 +49,9 @@ public:
 		CloseFifo();
 	}
 
+	FifoOutput(const FifoOutput &) = delete;
+	FifoOutput &operator=(const FifoOutput &) = delete;
+
 	static AudioOutput *Create(EventLoop &,
 				   const ConfigBlock &block) {
 		return new FifoOutput(block);
@@ -87,8 +90,8 @@ FifoOutput::FifoOutput(const ConfigBlock &block)
 inline void
 FifoOutput::Delete()
 {
-	FormatDebug(fifo_output_domain,
-		    "Removing FIFO \"%s\"", path_utf8.c_str());
+	FmtDebug(fifo_output_domain,
+		 "Removing FIFO \"{}\"", path_utf8);
 
 	try {
 		RemoveFile(path);
@@ -191,9 +194,9 @@ FifoOutput::Cancel() noexcept
 	} while (bytes > 0 && errno != EINTR);
 
 	if (bytes < 0 && errno != EAGAIN) {
-		FormatErrno(fifo_output_domain,
-			    "Flush of FIFO \"%s\" failed",
-			    path_utf8.c_str());
+		FmtError(fifo_output_domain,
+			 "Flush of FIFO \"{}\" failed: {}",
+			 path_utf8, strerror(errno));
 	}
 }
 

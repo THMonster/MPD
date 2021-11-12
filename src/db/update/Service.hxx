@@ -22,9 +22,8 @@
 
 #include "Config.hxx"
 #include "Queue.hxx"
-#include "event/DeferEvent.hxx"
+#include "event/InjectEvent.hxx"
 #include "thread/Thread.hxx"
-#include "util/Compiler.h"
 
 #include <memory>
 #include <string_view>
@@ -40,7 +39,7 @@ class CompositeStorage;
 class UpdateService final {
 	const UpdateConfig config;
 
-	DeferEvent defer;
+	InjectEvent defer;
 
 	SimpleDatabase &db;
 	CompositeStorage &storage;
@@ -90,7 +89,6 @@ public:
 	 * the whole music directory is updated
 	 * @return the job id
 	 */
-	gcc_nonnull_all
 	unsigned Enqueue(std::string_view path, bool discard);
 
 	/**
@@ -107,7 +105,7 @@ public:
 	void CancelMount(const char *uri) noexcept;
 
 private:
-	/* DeferEvent callback */
+	/* InjectEvent callback */
 	void RunDeferred() noexcept;
 
 	/* the update thread */

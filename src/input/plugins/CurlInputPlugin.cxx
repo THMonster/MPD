@@ -152,6 +152,8 @@ static struct curl_slist *http_200_aliases;
 /** HTTP proxy settings */
 static const char *proxy, *proxy_user, *proxy_password;
 static unsigned proxy_port;
+/** CA CERT settings*/
+static const char *cacert;
 
 static bool verify_peer, verify_host;
 
@@ -291,10 +293,7 @@ CurlInputStream::OnHeaders(unsigned status,
 
 		if (i != headers.end()) {
 			size_t icy_metaint = ParseUint64(i->second.c_str());
-#ifndef _WIN32
-			/* Windows doesn't know "%z" */
-			FormatDebug(curl_domain, "icy-metaint=%zu", icy_metaint);
-#endif
+			FmtDebug(curl_domain, "icy-metaint={}", icy_metaint);
 
 			if (icy_metaint > 0) {
 				icy->Start(icy_metaint);
@@ -321,7 +320,7 @@ CurlInputStream::OnData(ConstBuffer<void> data)
 
 	if (data.size > GetBufferSpace()) {
 		AsyncInputStream::Pause();
-		throw CurlRequest::Pause();
+		throw CurlResponseHandler::Pause{};
 	}
 
 	AppendToBuffer(data.data, data.size);
@@ -392,10 +391,10 @@ input_curl_init(EventLoop &event_loop, const ConfigBlock &block)
 
 	const auto version_info = curl_version_info(CURLVERSION_FIRST);
 	if (version_info != nullptr) {
-		FormatDebug(curl_domain, "version %s", version_info->version);
+		FmtDebug(curl_domain, "version {}", version_info->version);
 		if (version_info->features & CURL_VERSION_SSL)
-			FormatDebug(curl_domain, "with %s",
-				    version_info->ssl_version);
+			FmtDebug(curl_domain, "with {}",
+				 version_info->ssl_version);
 	}
 
 	http_200_aliases = curl_slist_append(http_200_aliases, "ICY 200 OK");
@@ -411,7 +410,7 @@ input_curl_init(EventLoop &event_loop, const ConfigBlock &block)
 #else
 	constexpr bool default_verify = true;
 #endif
-
+	cacert = block.GetBlockValue("cacert");
 	verify_peer = block.GetBlockValue("verify_peer", default_verify);
 	verify_host = block.GetBlockValue("verify_host", default_verify);
 }
@@ -483,8 +482,10 @@ CurlInputStream::InitEasy()
 				   StringFormat<1024>("%s:%s", proxy_user,
 						      proxy_password).c_str());
 
-	request->SetOption(CURLOPT_SSL_VERIFYPEER, verify_peer ? 1L : 0L);
-	request->SetOption(CURLOPT_SSL_VERIFYHOST, verify_host ? 2L : 0L);
+	if (cacert != nullptr)
+		request->SetOption(CURLOPT_CAINFO, cacert);
+	request->SetVerifyPeer(verify_peer);
+	request->SetVerifyHost(verify_host);
 	request->SetOption(CURLOPT_HTTPHEADER, request_headers.Get());
 
   /* abort if slower than x bytes/sec during y seconds */

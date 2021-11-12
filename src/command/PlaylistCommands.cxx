@@ -19,10 +19,13 @@
 
 #include "config.h"
 #include "PlaylistCommands.hxx"
+#include "PositionArg.hxx"
 #include "Request.hxx"
 #include "Instance.hxx"
+#include "db/Interface.hxx"
 #include "db/Selection.hxx"
 #include "db/DatabasePlaylist.hxx"
+#include "db/DatabaseSong.hxx"
 #include "PlaylistSave.hxx"
 #include "PlaylistFile.hxx"
 #include "PlaylistError.hxx"
@@ -42,6 +45,8 @@
 #include "util/UriExtract.hxx"
 #include "LocateUri.hxx"
 
+#include <fmt/format.h>
+
 bool
 playlist_commands_available() noexcept
 {
@@ -52,7 +57,7 @@ static void
 print_spl_list(Response &r, const PlaylistVector &list)
 {
 	for (const auto &i : list) {
-		r.Format("playlist: %s\n", i.name.c_str());
+		r.Fmt(FMT_STRING("playlist: {}\n"), i.name);
 
 		if (!IsNegative(i.mtime))
 			time_print(r, "Last-Modified", i.mtime);
@@ -77,10 +82,15 @@ handle_load(Client &client, Request args, [[maybe_unused]] Response &r)
 					   );
 	RangeArg range = args.ParseOptional(1, RangeArg::All());
 
-	const ScopeBulkEdit bulk_edit(client.GetPartition());
+	auto &partition = client.GetPartition();
+	const ScopeBulkEdit bulk_edit(partition);
 
 	auto &playlist = client.GetPlaylist();
 	const unsigned old_size = playlist.GetLength();
+
+	const unsigned position = args.size > 2
+		? ParseInsertPosition(args[2], partition.playlist)
+		: old_size;
 
 	const SongLoader loader(client);
 	playlist_open_into_queue(uri,
@@ -93,6 +103,16 @@ handle_load(Client &client, Request args, [[maybe_unused]] Response &r)
 	const unsigned new_size = playlist.GetLength();
 	for (unsigned i = old_size; i < new_size; ++i)
 		instance.LookupRemoteTag(playlist.queue.Get(i).GetRealURI());
+
+	if (position < old_size) {
+		const RangeArg move_range{old_size, new_size};
+
+		try {
+			partition.MoveRange(move_range, position);
+		} catch (...) {
+			/* ignore - shall we handle it? */
+		}
+	}
 
 	return CommandResult::OK;
 }
@@ -155,9 +175,11 @@ handle_playlistdelete([[maybe_unused]] Client &client,
 		      Request args, [[maybe_unused]] Response &r)
 {
 	const char *const name = args[0];
-	unsigned from = args.ParseUnsigned(1);
+	const auto range = args.ParseRange(1);
 
-	spl_remove_index(name, from);
+	PlaylistFileEditor editor(name, PlaylistFileEditor::LoadMode::YES);
+	editor.RemoveRange(range);
+	editor.Save();
 	return CommandResult::OK;
 }
 
@@ -169,7 +191,14 @@ handle_playlistmove([[maybe_unused]] Client &client,
 	unsigned from = args.ParseUnsigned(1);
 	unsigned to = args.ParseUnsigned(2);
 
-	spl_move_index(name, from, to);
+	if (from == to)
+		/* this doesn't check whether the playlist exists, but
+		   what the hell.. */
+		return CommandResult::OK;
+
+	PlaylistFileEditor editor(name, PlaylistFileEditor::LoadMode::YES);
+	editor.MoveIndex(from, to);
+	editor.Save();
 	return CommandResult::OK;
 }
 
@@ -183,11 +212,54 @@ handle_playlistclear([[maybe_unused]] Client &client,
 	return CommandResult::OK;
 }
 
+static CommandResult
+handle_playlistadd_position(Client &client, const char *playlist_name,
+			    const char *uri, unsigned position,
+			    Response &r)
+{
+	PlaylistFileEditor editor{
+		playlist_name,
+		PlaylistFileEditor::LoadMode::TRY,
+	};
+
+	if (position > editor.size()) {
+		r.Error(ACK_ERROR_ARG, "Bad position");
+		return CommandResult::ERROR;
+	}
+
+	if (uri_has_scheme(uri)) {
+		editor.Insert(position, uri);
+	} else {
+#ifdef ENABLE_DATABASE
+		const DatabaseSelection selection(uri, true, nullptr);
+
+		if (SearchInsertIntoPlaylist(client.GetDatabaseOrThrow(),
+					     client.GetStorage(),
+					     selection,
+					     editor, position) == 0)
+			/* no song was found, don't need to save */
+			return CommandResult::OK;
+#else
+		(void)client;
+		r.Error(ACK_ERROR_NO_EXIST, "No database");
+		return CommandResult::ERROR;
+#endif
+	}
+
+	editor.Save();
+
+	return CommandResult::OK;
+}
+
 CommandResult
 handle_playlistadd(Client &client, Request args, [[maybe_unused]] Response &r)
 {
 	const char *const playlist = args[0];
 	const char *const uri = args[1];
+
+	if (args.size >= 3)
+		return handle_playlistadd_position(client, playlist, uri,
+						   args.ParseUnsigned(2), r);
 
 	if (uri_has_scheme(uri)) {
 		const SongLoader loader(client);

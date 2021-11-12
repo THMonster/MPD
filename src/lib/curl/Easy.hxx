@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2018 Max Kellermann <max.kellermann@gmail.com>
+ * Copyright 2016-2021 Max Kellermann <max.kellermann@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,7 +31,6 @@
 #define CURL_EASY_HXX
 
 #include "String.hxx"
-#include "util/Compiler.h"
 
 #include <curl/curl.h>
 
@@ -136,6 +135,14 @@ public:
 		SetOption(CURLOPT_FAILONERROR, (long)value);
 	}
 
+	void SetVerifyHost(bool value) {
+		SetOption(CURLOPT_SSL_VERIFYHOST, value ? 2L : 0L);
+	}
+
+	void SetVerifyPeer(bool value) {
+		SetOption(CURLOPT_SSL_VERIFYPEER, (long)value);
+	}
+
 	void SetConnectTimeout(long timeout) {
 		SetOption(CURLOPT_CONNECTTIMEOUT, timeout);
 	}
@@ -191,7 +198,7 @@ public:
 	/**
 	 * Returns the response body's size, or -1 if that is unknown.
 	 */
-	gcc_pure
+	[[gnu::pure]]
 	int64_t GetContentLength() const noexcept {
 		double value;
 		return GetInfo(CURLINFO_CONTENT_LENGTH_DOWNLOAD, &value)

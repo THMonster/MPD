@@ -21,6 +21,7 @@
 #include "lib/dbus/Connection.hxx"
 #include "lib/dbus/Error.hxx"
 #include "lib/dbus/Glue.hxx"
+#include "lib/dbus/FilterHelper.hxx"
 #include "lib/dbus/Message.hxx"
 #include "lib/dbus/AsyncRequest.hxx"
 #include "lib/dbus/ReadIter.hxx"
@@ -56,6 +57,8 @@ class UdisksNeighborExplorer final
 	EventLoop &event_loop;
 
 	Manual<SafeSingleton<ODBus::Glue>> dbus_glue;
+
+	ODBus::FilterHelper filter_helper;
 
 	ODBus::AsyncRequest list_request;
 
@@ -97,9 +100,6 @@ private:
 
 	DBusHandlerResult HandleMessage(DBusConnection *dbus_connection,
 					DBusMessage *message) noexcept;
-	static DBusHandlerResult HandleMessage(DBusConnection *dbus_connection,
-					       DBusMessage *message,
-					       void *user_data) noexcept;
 };
 
 inline void
@@ -119,22 +119,19 @@ UdisksNeighborExplorer::DoOpen()
 		error.CheckThrow("DBus AddMatch error");
 
 		try {
-			dbus_connection_add_filter(connection,
-						   HandleMessage, this,
-						   nullptr);
+			filter_helper.Add(connection,
+					  BIND_THIS_METHOD(HandleMessage));
 
 			try {
 				auto msg = Message::NewMethodCall(UDISKS2_INTERFACE,
 								  UDISKS2_PATH,
 								  DBUS_OM_INTERFACE,
 								  "GetManagedObjects");
-				list_request.Send(connection, *msg.Get(),
-						  std::bind(&UdisksNeighborExplorer::OnListNotify,
-							    this, std::placeholders::_1));
+				list_request.Send(connection, *msg.Get(), [this](auto o) {
+					return OnListNotify(std::move(o));
+				});
 			} catch (...) {
-				dbus_connection_remove_filter(connection,
-							      HandleMessage,
-							      this);
+				filter_helper.Remove();
 				throw;
 			}
 		} catch (...) {
@@ -163,7 +160,7 @@ UdisksNeighborExplorer::DoClose() noexcept
 
 	auto &connection = GetConnection();
 
-	dbus_connection_remove_filter(connection, HandleMessage, this);
+	filter_helper.Remove();
 	dbus_bus_remove_match(connection, udisks_neighbor_match, nullptr);
 
 	dbus_glue.Destruct();
@@ -196,11 +193,11 @@ UdisksNeighborExplorer::Insert(UDisks2::Object &&o) noexcept
 
 	{
 		const std::lock_guard<Mutex> protect(mutex);
-		auto i = by_uri.emplace(std::make_pair(o.GetUri(), info));
+		auto i = by_uri.emplace(o.GetUri(), info);
 		if (!i.second)
 			i.first->second = info;
 
-		by_path.emplace(std::make_pair(o.path, i.first));
+		by_path.emplace(o.path, i.first);
 		// TODO: do we need to remove a conflicting path?
 	}
 
@@ -229,9 +226,8 @@ inline void
 UdisksNeighborExplorer::OnListNotify(ODBus::Message reply) noexcept
 {
 	try{
-		ParseObjects(reply,
-			     std::bind(&UdisksNeighborExplorer::Insert,
-				       this, std::placeholders::_1));
+		UDisks2::ParseObjects(reply,
+				      [this](auto p) { return Insert(std::move(p)); });
 	} catch (...) {
 		LogError(std::current_exception(),
 			 "Failed to parse GetManagedObjects reply");
@@ -246,7 +242,7 @@ UdisksNeighborExplorer::HandleMessage(DBusConnection *, DBusMessage *message) no
 
 	if (dbus_message_is_signal(message, DBUS_OM_INTERFACE,
 				   "InterfacesAdded") &&
-	    dbus_message_has_signature(message, InterfacesAddedType::value)) {
+	    dbus_message_has_signature(message, InterfacesAddedType::as_string)) {
 		RecurseInterfaceDictEntry(ReadMessageIter(*message), [this](const char *path, auto &&i){
 				UDisks2::Object o(path);
 				UDisks2::ParseObject(o, std::forward<decltype(i)>(i));
@@ -257,21 +253,11 @@ UdisksNeighborExplorer::HandleMessage(DBusConnection *, DBusMessage *message) no
 		return DBUS_HANDLER_RESULT_HANDLED;
 	} else if (dbus_message_is_signal(message, DBUS_OM_INTERFACE,
 					  "InterfacesRemoved") &&
-		   dbus_message_has_signature(message, InterfacesRemovedType::value)) {
+		   dbus_message_has_signature(message, InterfacesRemovedType::as_string)) {
 		Remove(ReadMessageIter(*message).GetString());
 		return DBUS_HANDLER_RESULT_HANDLED;
 	} else
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-}
-
-DBusHandlerResult
-UdisksNeighborExplorer::HandleMessage(DBusConnection *connection,
-				      DBusMessage *message,
-				      void *user_data) noexcept
-{
-	auto &agent = *(UdisksNeighborExplorer *)user_data;
-
-	return agent.HandleMessage(connection, message);
 }
 
 static std::unique_ptr<NeighborExplorer>

@@ -18,7 +18,9 @@
  */
 
 #include "HwSetup.hxx"
+#include "Error.hxx"
 #include "Format.hxx"
+#include "lib/fmt/AudioFormatFormatter.hxx"
 #include "util/ByteOrder.hxx"
 #include "util/Domain.hxx"
 #include "util/RuntimeError.hxx"
@@ -185,29 +187,27 @@ SetupHw(snd_pcm_t *pcm,
 	/* configure HW params */
 	err = snd_pcm_hw_params_any(pcm, hwparams);
 	if (err < 0)
-		throw FormatRuntimeError("snd_pcm_hw_params_any() failed: %s",
-					 snd_strerror(-err));
+		throw Alsa::MakeError(err, "snd_pcm_hw_params_any() failed");
 
 	err = snd_pcm_hw_params_set_access(pcm, hwparams,
 					   SND_PCM_ACCESS_RW_INTERLEAVED);
 	if (err < 0)
-		throw FormatRuntimeError("snd_pcm_hw_params_set_access() failed: %s",
-					 snd_strerror(-err));
+		throw Alsa::MakeError(err, "snd_pcm_hw_params_set_access() failed");
 
 	err = SetupSampleFormat(pcm, hwparams,
 				audio_format.format, params);
 	if (err < 0)
-		throw FormatRuntimeError("Failed to configure format %s: %s",
-					 sample_format_to_string(audio_format.format),
-					 snd_strerror(-err));
+		throw Alsa::MakeError(err,
+				      fmt::format("Failed to configure format {}",
+						  audio_format.format).c_str());
 
 	unsigned int channels = audio_format.channels;
 	err = snd_pcm_hw_params_set_channels_near(pcm, hwparams,
 						  &channels);
 	if (err < 0)
-		throw FormatRuntimeError("Failed to configure %i channels: %s",
-					 (int)audio_format.channels,
-					 snd_strerror(-err));
+		throw Alsa::MakeError(err,
+				      fmt::format("Failed to configure {} channels",
+						  audio_format.channels).c_str());
 
 	audio_format.channels = (int8_t)channels;
 
@@ -218,9 +218,9 @@ SetupHw(snd_pcm_t *pcm,
 	err = snd_pcm_hw_params_set_rate_near(pcm, hwparams,
 					      &output_sample_rate, nullptr);
 	if (err < 0)
-		throw FormatRuntimeError("Failed to configure sample rate %u Hz: %s",
-					 requested_sample_rate,
-					 snd_strerror(-err));
+		throw Alsa::MakeError(err,
+				      fmt::format("Failed to configure sample rate {} Hz",
+						  requested_sample_rate).c_str());
 
 	if (output_sample_rate == 0)
 		throw FormatRuntimeError("Failed to configure sample rate %u Hz",
@@ -235,9 +235,9 @@ SetupHw(snd_pcm_t *pcm,
 	unsigned buffer_time_min, buffer_time_max;
 	snd_pcm_hw_params_get_buffer_time_min(hwparams, &buffer_time_min, nullptr);
 	snd_pcm_hw_params_get_buffer_time_max(hwparams, &buffer_time_max, nullptr);
-	FormatDebug(alsa_output_domain, "buffer: size=%u..%u time=%u..%u",
-		    (unsigned)buffer_size_min, (unsigned)buffer_size_max,
-		    buffer_time_min, buffer_time_max);
+	FmtDebug(alsa_output_domain, "buffer: size={}..{} time={}..{}",
+		 buffer_size_min, buffer_size_max,
+		 buffer_time_min, buffer_time_max);
 
 	snd_pcm_uframes_t period_size_min, period_size_max;
 	snd_pcm_hw_params_get_period_size_min(hwparams, &period_size_min, nullptr);
@@ -245,16 +245,15 @@ SetupHw(snd_pcm_t *pcm,
 	unsigned period_time_min, period_time_max;
 	snd_pcm_hw_params_get_period_time_min(hwparams, &period_time_min, nullptr);
 	snd_pcm_hw_params_get_period_time_max(hwparams, &period_time_max, nullptr);
-	FormatDebug(alsa_output_domain, "period: size=%u..%u time=%u..%u",
-		    (unsigned)period_size_min, (unsigned)period_size_max,
-		    period_time_min, period_time_max);
+	FmtDebug(alsa_output_domain, "period: size={}..{} time={}..{}",
+		 period_size_min, period_size_max,
+		 period_time_min, period_time_max);
 
 	if (buffer_time > 0) {
 		err = snd_pcm_hw_params_set_buffer_time_near(pcm, hwparams,
 							     &buffer_time, nullptr);
 		if (err < 0)
-			throw FormatRuntimeError("snd_pcm_hw_params_set_buffer_time_near() failed: %s",
-						 snd_strerror(-err));
+			throw Alsa::MakeError(err, "snd_pcm_hw_params_set_buffer_time_near() failed");
 	} else {
 		err = snd_pcm_hw_params_get_buffer_time(hwparams, &buffer_time,
 							nullptr);
@@ -265,9 +264,9 @@ SetupHw(snd_pcm_t *pcm,
 	if (period_time_ro == 0 && buffer_time >= 10000) {
 		period_time_ro = period_time = buffer_time / 4;
 
-		FormatDebug(alsa_output_domain,
-			    "default period_time = buffer_time/4 = %u/4 = %u",
-			    buffer_time, period_time);
+		FmtDebug(alsa_output_domain,
+			 "default period_time = buffer_time/4 = {}/4 = {}",
+			 buffer_time, period_time);
 	}
 
 	if (period_time_ro > 0) {
@@ -275,32 +274,27 @@ SetupHw(snd_pcm_t *pcm,
 		err = snd_pcm_hw_params_set_period_time_near(pcm, hwparams,
 							     &period_time, nullptr);
 		if (err < 0)
-			throw FormatRuntimeError("snd_pcm_hw_params_set_period_time_near() failed: %s",
-						 snd_strerror(-err));
+			throw Alsa::MakeError(err, "snd_pcm_hw_params_set_period_time_near() failed");
 	}
 
 	err = snd_pcm_hw_params(pcm, hwparams);
 	if (err < 0)
-		throw FormatRuntimeError("snd_pcm_hw_params() failed: %s",
-					 snd_strerror(-err));
+		throw Alsa::MakeError(err, "snd_pcm_hw_params() failed");
 
 	HwResult result;
 
 	err = snd_pcm_hw_params_get_format(hwparams, &result.format);
 	if (err < 0)
-		throw FormatRuntimeError("snd_pcm_hw_params_get_format() failed: %s",
-					 snd_strerror(-err));
+		throw Alsa::MakeError(err, "snd_pcm_hw_params_get_format() failed");
 
 	err = snd_pcm_hw_params_get_buffer_size(hwparams, &result.buffer_size);
 	if (err < 0)
-		throw FormatRuntimeError("snd_pcm_hw_params_get_buffer_size() failed: %s",
-					 snd_strerror(-err));
+		throw Alsa::MakeError(err, "snd_pcm_hw_params_get_buffer_size() failed");
 
 	err = snd_pcm_hw_params_get_period_size(hwparams, &result.period_size,
 						nullptr);
 	if (err < 0)
-		throw FormatRuntimeError("snd_pcm_hw_params_get_period_size() failed: %s",
-					 snd_strerror(-err));
+		throw Alsa::MakeError(err, "snd_pcm_hw_params_get_period_size() failed");
 
 	return result;
 }

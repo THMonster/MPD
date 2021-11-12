@@ -23,11 +23,23 @@ The default plugin. Stores a copy of the database in memory. A file is used for 
      - The path of the cache directory for additional storages mounted at runtime. This setting is necessary for the **mount** protocol command.
    * - **compress yes|no**
      - Compress the database file using gzip? Enabled by default (if built with zlib).
+   * - **hide_playlist_targets yes|no**
+     - Hide songs which are referenced by playlists?  Thas is,
+       playlist files which are represented in the database as virtual
+       directories (playlist plugin setting ``as_directory``).  This
+       option is enabled by default and avoids duplicate songs; one
+       copy for the original file, and another copy in the virtual
+       directory of a CUE file referring to it.
 
 proxy
 -----
 
-Provides access to the database of another :program:`MPD` instance using libmpdclient. This is useful when you mount the music directory via NFS/SMB, and the file server already runs a :program:`MPD` instance. Only the file server needs to update the database.
+Provides access to the database of another :program:`MPD` instance
+using `libmpdclient
+<https://www.musicpd.org/libs/libmpdclient/>`_. This is useful when
+you mount the music directory via NFS/SMB, and the file server already
+runs a :program:`MPD` (0.20 or newer) instance. Only the file server
+needs to update the database.
 
 .. list-table::
    :widths: 20 80                     
@@ -48,6 +60,15 @@ upnp
 ----
 
 Provides access to UPnP media servers.
+
+.. list-table::
+   :widths: 20 80
+   :header-rows: 1
+
+   * - Setting
+     - Description
+   * - **interface**
+     - Interface used to discover media servers. Decided by upnp if left unconfigured.
 
 Storage plugins
 ===============
@@ -210,6 +231,8 @@ will be in effect.
      - Verify the peer's SSL certificate? `More information <http://curl.haxx.se/libcurl/c/CURLOPT_SSL_VERIFYPEER.html>`_.
    * - **verify_host yes|no**
      - Verify the certificate's name against host? `More information <http://curl.haxx.se/libcurl/c/CURLOPT_SSL_VERIFYHOST.html>`_.
+   * - **cacert**
+     - Set path to Certificate Authority (CA) bundle `More information <https://curl.se/libcurl/c/CURLOPT_CAINFO.html>`_.
 
 ffmpeg
 ------
@@ -451,8 +474,38 @@ Module player based on MODPlug.
 
    * - Setting
      - Description
+   * - **resampling_mode nearest|linear|spline|fir**
+     - Sets the resampling mode. "nearest" disables interpolation (good for chiptunes). "linear" makes modplug use linear interpolation (fast, good quality). "spline" makes modplug use cubic spline interpolation (high quality). "fir" makes modplug use 8-tap fir filter (extremely high quality). Defaults to "fir".
    * - **loop_count**
      - Number of times to loop the module if it uses backward loops. Default is 0 which prevents looping. -1 loops forever.
+
+openmpt
+-------
+
+Module player based on `libopenmpt <https://lib.openmpt.org>`_.
+
+.. list-table::
+   :widths: 20 80
+   :header-rows: 1
+
+   * - Setting
+     - Description
+   * - **repeat_count**
+     - Set how many times the module repeats. -1: repeat forever. 0: play once, repeat zero times (the default). n>0: play once and repeat n times after that.
+   * - **stereo_separation**
+     - Sets the stereo separation. The supported value range is [0,200]. Defaults to 100.
+   * - **interpolation_filter 0|1|2|4|8**
+     - Sets the interpolation filter. 0: internal default. 1: no interpolation (zero order hold). 2: linear interpolation. 4: cubic interpolation. 8: windowed sinc with 8 taps. Defaults to 0.
+   * - **override_mptm_interp_filter yes|no**
+     - If `interpolation_filter` has been changed, setting this to yes will force all MPTM modules to use that interpolation filter. If set to no, MPTM modules will play with their own interpolation filter regardless of the value of `interpolation_filter`. Defaults to no.
+   * - **volume_ramping**
+     - Sets the amount of volume ramping done by the libopenmpt mixer. The default value is -1, which indicates a recommended default value. The meaningful value range is [-1..10]. A value of 0 completely disables volume ramping. This might cause clicks in sound output. Higher values imply slower/softer volume ramps.
+   * - **sync_samples yes|no**
+     - Syncs sample playback when seeking. Defaults to yes.
+   * - **emulate_amiga yes|no**
+     - Enables the Amiga resampler for Amiga modules. This emulates the sound characteristics of the Paula chip and overrides the selected interpolation filter. Non-Amiga module formats are not affected by this setting. Defaults to yes.
+   * - **emulate_amiga_type**
+     - Configures the filter type to use for the Amiga resampler. Supported values are: "auto": Filter type is chosen by the library and might change. This is the default. "a500": Amiga A500 filter. "a1200": Amiga A1200 filter. "unfiltered": BLEP synthesis without model-specific filters. The LED filter is ignored by this setting. This filter mode is considered to be experimental and might change in the future. Defaults to "auto". Requires libopenmpt 0.5 or higher.
 
 mpcdec
 ------
@@ -548,6 +601,10 @@ Encodes into `FLAC <https://xiph.org/flac/>`_ (lossless).
      - Description
    * - **compression**
      - Sets the libFLAC compression level. The levels range from 0 (fastest, least compression) to 8 (slowest, most compression).
+   * - **oggflac yes|no**
+     - Configures if the stream should be Ogg FLAC versus native FLAC. Defaults to "no" (use native FLAC).
+   * - **oggchaining yes|no**
+     - Configures if the stream should use Ogg Chaining for in-stream metadata. Defaults to "no". Setting this to "yes" also enables Ogg FLAC.
 
 lame
 ----
@@ -612,11 +669,15 @@ Encodes into `Ogg Opus <http://www.opus-codec.org/>`_.
    * - Setting
      - Description
    * - **bitrate**
-     - Sets the data rate in bit per second. The special value "auto" lets libopus choose a rate (which is the default), and "max" uses the maximum possible data rate.
+     - Sets the data rate in bits per second. The special value "auto" lets libopus choose a rate (which is the default), and "max" uses the maximum possible data rate.
    * - **complexity**
      - Sets the `Opus complexity <https://wiki.xiph.org/OpusFAQ#What_is_the_complexity_of_Opus.3F>`_.
    * - **signal**
      - Sets the Opus signal type. Valid values are "auto" (the default), "voice" and "music".
+   * - **vbr yes|no|constrained**
+     - Sets the vbr mode. Setting to "yes" (default) enables variable bitrate, "no" forces constant bitrate and frame sizes, "constrained" uses constant bitrate analogous to CBR in AAC and MP3.
+   * - **packet_loss**
+     - Sets the expected packet loss percentage. This value can be increased from the default "0" for a more redundant stream at the expense of quality.
    * - **opustags yes|no**
      - Configures how metadata is interleaved into the stream. If set to yes, then metadata is inserted using ogg stream chaining, as specified in :rfc:`7845`. If set to no (the default), then ogg stream chaining is avoided and other output-dependent method is used, if available.
 
@@ -784,6 +845,16 @@ The `Advanced Linux Sound Architecture (ALSA) <http://www.alsa-project.org/>`_ p
      - If set to no, then libasound will not attempt to convert between different sample formats (16 bit, 24 bit, floating point, ...).
    * - **dop yes|no**
      - If set to yes, then DSD over PCM according to the `DoP standard <http://dsd-guide.com/dop-open-standard>`_ is enabled. This wraps DSD samples in fake 24 bit PCM, and is understood by some DSD capable products, but may be harmful to other hardware. Therefore, the default is no and you can enable the option at your own risk.
+   * - **stop_dsd_silence yes|no**
+     - If enabled, silence is played before manually stopping playback
+       ("stop" or "pause") in DSD mode (native DSD or DoP).  This is a
+       workaround for some DACs which emit noise when stopping DSD
+       playback.
+   * - **thesycon_dsd_workaround yes|no**
+     - If enabled, enables a workaround for a bug in Thesycon USB
+       audio receivers.  On these devices, playing DSD512 or PCM
+       causes all subsequent attempts to play other DSD rates to fail,
+       which can be fixed by briefly playing PCM at 44.1 kHz.
    * - **allowed_formats F1 F2 ...**
      - Specifies a list of allowed audio formats, separated by a space. All items may contain asterisks as a wild card, and may be followed by "=dop" to enable DoP (DSD over PCM) for this particular format. The first matching format is used, and if none matches, MPD chooses the best fallback of this list.
        
@@ -959,6 +1030,8 @@ On Linux, OSS has been superseded by ALSA. Use the ALSA output plugin :ref:`alsa
      - Description
    * - **device PATH**
      - Sets the path of the PCM device. If not specified, then MPD will attempt to open /dev/sound/dsp and /dev/dsp.
+   * - **dop yes|no**
+     - If set to yes, then DSD over PCM according to the `DoP standard <http://dsd-guide.com/dop-open-standard>`_ is enabled. This wraps DSD samples in fake 24 bit PCM, and is understood by some DSD capable products, but may be harmful to other hardware. Therefore, the default is no and you can enable the option at your own risk.
 
 The according hardware mixer plugin understands the following settings:
 
@@ -1021,6 +1094,28 @@ The pipe plugin starts a program and writes raw PCM data into its standard input
    * - **command CMD**
      - This command is invoked with the shell.
 
+pipewire
+--------
+
+Connect to a `PipeWire <https://pipewire.org/>`_ server.  Requires
+``libpipewire``.
+
+.. list-table::
+   :widths: 20 80
+   :header-rows: 1
+
+   * - Setting
+     - Description
+   * - **target NAME**
+     - Link to the given target.  If not specified, let the PipeWire
+       manager select a target.  To get a list of available targets,
+       type ``pw-cli dump short Node``
+   * - **remote NAME**
+     - The name of the remote to connect to.  The default is
+       ``pipewire-0``.
+   * - **dsd yes|no**
+     - Enable DSD playback.  This requires PipeWire 0.38.
+
 .. _pulse_plugin:
 
 pulse
@@ -1076,8 +1171,6 @@ You must set a format.
      - Sets the host name of the `ShoutCast <http://www.shoutcast.com/>`_ / `IceCast <http://icecast.org/>`_ server.
    * - **port PORTNUMBER**
      - Connect to this port number on the specified host.
-   * - **timeout SECONDS**
-     - Set the timeout for the shout connection in seconds. Defaults to 2 seconds.
    * - **protocol icecast2|icecast1|shoutcast**
      - Specifies the protocol that wil be used to connect to the server. The default is "icecast2".
    * - **tls disabled|auto|auto_no_plain|rfc2818|rfc2817**
@@ -1111,6 +1204,34 @@ Plugin using the `OpenSL ES <https://www.khronos.org/opensles/>`__
 audio API.  Its primary use is local playback on Android, where
 :ref:`ALSA <alsa_plugin>` is not available.  It supports 16 bit and
 floating point samples.
+
+
+snapcast
+--------
+
+Snapcast is a multiroom client-server audio player.  This plugin
+allows MPD to act as a `Snapcast
+<https://github.com/badaix/snapcast>`__ server.  Snapcast clients
+connect to it and receive audio data from MPD.
+
+You must set a format.
+
+.. list-table::
+   :widths: 20 80
+   :header-rows: 1
+
+   * - Setting
+     - Description
+   * - **port P**
+     - Binds the Snapcast server to the specified port.  The default
+       port is :samp:`1704`.
+   * - **bind_to_address ADDR**
+     - Binds the Snapcast server to the specified address.  Multiple
+       addresses in parallel are not supported.  The default is to
+       bind on all addresses on port :samp:`1704`.
+   * - **zeroconf yes|no**
+     - Publish the Snapcast server as service type ``_snapcast._tcp``
+       via Zeroconf (Avahi or Bonjour).  Default is :samp:`yes`.
 
 
 solaris

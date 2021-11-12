@@ -21,6 +21,7 @@
 #include "DecoderAPI.hxx"
 #include "Domain.hxx"
 #include "Control.hxx"
+#include "lib/fmt/AudioFormatFormatter.hxx"
 #include "song/DetachedSong.hxx"
 #include "pcm/Convert.hxx"
 #include "MusicPipe.hxx"
@@ -268,9 +269,9 @@ DecoderBridge::Ready(const AudioFormat audio_format,
 	assert(decoder_tag == nullptr);
 	assert(!seeking);
 
-	FormatDebug(decoder_domain, "audio_format=%s, seekable=%s",
-		    ToString(audio_format).c_str(),
-		    seekable ? "true" : "false");
+	FmtDebug(decoder_domain, "audio_format={}, seekable={}",
+		 audio_format,
+		 seekable);
 
 	{
 		const std::lock_guard<Mutex> protect(dc.mutex);
@@ -278,8 +279,8 @@ DecoderBridge::Ready(const AudioFormat audio_format,
 	}
 
 	if (dc.in_audio_format != dc.out_audio_format) {
-		FormatDebug(decoder_domain, "converting to %s",
-			    ToString(dc.out_audio_format).c_str());
+		FmtDebug(decoder_domain, "converting to {}",
+			 dc.out_audio_format);
 
 		try {
 			convert = std::make_unique<PcmConvert>(dc.in_audio_format,
@@ -473,8 +474,8 @@ DecoderBridge::SubmitData(InputStream *is,
 	if (UpdateStreamTag(is)) {
 		if (decoder_tag != nullptr)
 			/* merge with tag from decoder plugin */
-			cmd = DoSendTag(*Tag::Merge(*decoder_tag,
-						    *stream_tag));
+			cmd = DoSendTag(Tag::Merge(*decoder_tag,
+						   *stream_tag));
 		else
 			/* send only the stream tag */
 			cmd = DoSendTag(*stream_tag);
@@ -597,7 +598,7 @@ DecoderBridge::SubmitTag(InputStream *is, Tag &&tag) noexcept
 
 	if (stream_tag != nullptr)
 		/* merge with tag from input stream */
-		cmd = DoSendTag(*Tag::Merge(*stream_tag, *decoder_tag));
+		cmd = DoSendTag(Tag::Merge(*stream_tag, *decoder_tag));
 	else
 		/* send only the decoder tag */
 		cmd = DoSendTag(*decoder_tag);

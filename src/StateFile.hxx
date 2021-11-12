@@ -21,8 +21,7 @@
 #define MPD_STATE_FILE_HXX
 
 #include "StateFileConfig.hxx"
-#include "event/TimerEvent.hxx"
-#include "util/Compiler.h"
+#include "event/FarTimerEvent.hxx"
 #include "config.h"
 
 #include <string>
@@ -36,7 +35,7 @@ class StateFile final {
 
 	const std::string path_utf8;
 
-	TimerEvent timer_event;
+	FarTimerEvent timer_event;
 
 	Partition &partition;
 
@@ -76,7 +75,7 @@ private:
 	 * Check if MPD's state was modified since the last
 	 * RememberVersions() call.
 	 */
-	gcc_pure
+	[[gnu::pure]]
 	bool IsModified() const noexcept;
 
 	/* callback for #timer_event */

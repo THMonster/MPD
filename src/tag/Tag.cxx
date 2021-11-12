@@ -53,8 +53,16 @@ Tag::Tag(const Tag &other) noexcept
 	}
 }
 
-std::unique_ptr<Tag>
+Tag
 Tag::Merge(const Tag &base, const Tag &add) noexcept
+{
+	TagBuilder builder(add);
+	builder.Complement(base);
+	return builder.Commit();
+}
+
+std::unique_ptr<Tag>
+Tag::MergePtr(const Tag &base, const Tag &add) noexcept
 {
 	TagBuilder builder(add);
 	builder.Complement(base);
@@ -70,7 +78,23 @@ Tag::Merge(std::unique_ptr<Tag> base, std::unique_ptr<Tag> add) noexcept
 	if (base == nullptr)
 		return add;
 
-	return Merge(*base, *add);
+	return MergePtr(*base, *add);
+}
+
+std::unique_ptr<Tag>
+Tag::Merge(const Tag *base, const Tag *add) noexcept
+{
+	if (base == nullptr && add == nullptr)
+		/* no tag */
+		return nullptr;
+
+	if (base == nullptr)
+		return std::make_unique<Tag>(*add);
+
+	if (add == nullptr)
+		return std::make_unique<Tag>(*base);
+
+	return MergePtr(*base, *add);
 }
 
 const char *

@@ -558,10 +558,10 @@ Player::CheckDecoderStartup(std::unique_lock<Mutex> &lock) noexcept
 		}
 
 		if (!paused && !OpenOutput()) {
-			FormatError(player_domain,
-				    "problems opening audio device "
-				    "while playing \"%s\"",
-				    dc.song->GetURI());
+			FmtError(player_domain,
+				 "problems opening audio device "
+				 "while playing \"{}\"",
+				 dc.song->GetURI());
 			return true;
 		}
 
@@ -964,7 +964,7 @@ Player::SongBorder() noexcept
 	{
 		const ScopeUnlock unlock(pc.mutex);
 
-		FormatNotice(player_domain, "played \"%s\"", song->GetURI());
+		FmtNotice(player_domain, "played \"{}\"", song->GetURI());
 
 		ReplacePipe(dc.pipe);
 
@@ -1049,7 +1049,8 @@ Player::Run() noexcept
 			   calculate how many chunks will be required
 			   for it */
 			cross_fade_chunks =
-				pc.cross_fade.Calculate(dc.total_time,
+				pc.cross_fade.Calculate(pc.total_time,
+							dc.total_time,
 							dc.replay_gain_db,
 							dc.replay_gain_prev_db,
 							dc.GetMixRampStart(),
@@ -1135,7 +1136,7 @@ Player::Run() noexcept
 	cross_fade_tag.reset();
 
 	if (song != nullptr) {
-		FormatNotice(player_domain, "played \"%s\"", song->GetURI());
+		FmtNotice(player_domain, "played \"{}\"", song->GetURI());
 		song.reset();
 	}
 

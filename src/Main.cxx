@@ -40,10 +40,11 @@
 #include "input/cache/Config.hxx"
 #include "input/cache/Manager.hxx"
 #include "event/Loop.hxx"
+#include "event/Call.hxx"
 #include "fs/AllocatedPath.hxx"
 #include "fs/Config.hxx"
 #include "playlist/PlaylistRegistry.hxx"
-#include "zeroconf/ZeroconfGlue.hxx"
+#include "zeroconf/Glue.hxx"
 #include "decoder/DecoderList.hxx"
 #include "pcm/AudioParser.hxx"
 #include "pcm/Convert.hxx"
@@ -141,14 +142,24 @@ struct Config {
 #ifdef ENABLE_DAEMON
 
 static void
-glue_daemonize_init(const struct options *options,
+glue_daemonize_init(const CommandLineOptions &options,
 		    const ConfigData &config)
 {
+	auto pid_file = config.GetPath(ConfigOption::PID_FILE);
+
+#ifdef __linux__
+	if (options.systemd && pid_file != nullptr) {
+		pid_file = nullptr;
+		fprintf(stderr,
+			"Ignoring the 'pid_file' setting in systemd mode\n");
+	}
+#endif
+
 	daemonize_init(config.GetString(ConfigOption::USER),
 		       config.GetString(ConfigOption::GROUP),
-		       config.GetPath(ConfigOption::PID_FILE));
+		       std::move(pid_file));
 
-	if (options->kill)
+	if (options.kill)
 		daemonize_kill();
 }
 
@@ -296,9 +307,8 @@ initialize_decoder_and_player(Instance &instance,
 							 "positive integer", s);
 
 			if (result < MIN_BUFFER_SIZE) {
-				FormatWarning(config_domain, "buffer size %lu is too small, using %lu bytes instead",
-					      (unsigned long)result,
-					      (unsigned long)MIN_BUFFER_SIZE);
+				FmtWarning(config_domain, "buffer size {} is too small, using {} bytes instead",
+					   result, MIN_BUFFER_SIZE);
 				result = MIN_BUFFER_SIZE;
 			}
 
@@ -344,7 +354,7 @@ Instance::BeginShutdownUpdate() noexcept
 {
 #ifdef ENABLE_DATABASE
 #ifdef ENABLE_INOTIFY
-	mpd_inotify_finish();
+	inotify_update.reset();
 #endif
 
 	if (update != nullptr)
@@ -361,7 +371,8 @@ Instance::BeginShutdownPartitions() noexcept
 }
 
 static inline void
-MainConfigured(const struct options &options, const ConfigData &raw_config)
+MainConfigured(const CommandLineOptions &options,
+	       const ConfigData &raw_config)
 {
 #ifdef ENABLE_DAEMON
 	daemonize_close_stdin();
@@ -384,7 +395,7 @@ MainConfigured(const struct options &options, const ConfigData &raw_config)
 	const Config config(raw_config);
 
 #ifdef ENABLE_DAEMON
-	glue_daemonize_init(&options, raw_config);
+	glue_daemonize_init(options, raw_config);
 #endif
 
 	TagLoadConfig(raw_config);
@@ -451,7 +462,8 @@ MainConfigured(const struct options &options, const ConfigData &raw_config)
 	command_init();
 
 	for (auto &partition : instance.partitions) {
-		partition.outputs.Configure(instance.rtio_thread.GetEventLoop(),
+		partition.outputs.Configure(instance.io_thread.GetEventLoop(),
+					    instance.rtio_thread.GetEventLoop(),
 					    raw_config,
 					    config.replay_gain);
 		partition.UpdateEffectiveReplayGainMode();
@@ -486,8 +498,27 @@ MainConfigured(const struct options &options, const ConfigData &raw_config)
 	};
 #endif
 
-	ZeroconfInit(raw_config, instance.event_loop);
-	AtScopeExit() { ZeroconfDeinit(); };
+#ifdef HAVE_ZEROCONF
+	std::unique_ptr<ZeroconfHelper> zeroconf;
+	try {
+		auto &event_loop = instance.io_thread.GetEventLoop();
+		BlockingCall(event_loop, [&](){
+			zeroconf = ZeroconfInit(raw_config, event_loop);
+		});
+	} catch (...) {
+		LogError(std::current_exception(),
+			 "Zeroconf initialization failed");
+	}
+
+	AtScopeExit(&zeroconf, &instance) {
+		if (zeroconf) {
+			auto &event_loop = instance.io_thread.GetEventLoop();
+			BlockingCall(event_loop, [&](){
+				zeroconf.reset();
+			});
+		}
+	};
+#endif
 
 #ifdef ENABLE_DATABASE
 	if (create_db) {
@@ -503,15 +534,21 @@ MainConfigured(const struct options &options, const ConfigData &raw_config)
 	if (raw_config.GetBool(ConfigOption::AUTO_UPDATE, false)) {
 #ifdef ENABLE_INOTIFY
 		if (instance.storage != nullptr &&
-		    instance.update != nullptr)
-			mpd_inotify_init(instance.event_loop,
-					 *instance.storage,
-					 *instance.update,
-					 raw_config.GetUnsigned(ConfigOption::AUTO_UPDATE_DEPTH,
-								INT_MAX));
+		    instance.update != nullptr) {
+			try {
+				instance.inotify_update =
+					mpd_inotify_init(instance.event_loop,
+							 *instance.storage,
+							 *instance.update,
+							 raw_config.GetUnsigned(ConfigOption::AUTO_UPDATE_DEPTH,
+										INT_MAX));
+			} catch (...) {
+				LogError(std::current_exception());
+			}
+		}
 #else
-		FormatWarning(config_domain,
-			      "inotify: auto_update was disabled. enable during compilation phase");
+		LogWarning(config_domain,
+			   "inotify: auto_update was disabled. enable during compilation phase");
 #endif
 	}
 #endif
@@ -556,7 +593,7 @@ MainConfigured(const struct options &options, const ConfigData &raw_config)
 static void
 AndroidMain()
 {
-	struct options options;
+	CommandLineOptions options;
 	ConfigData raw_config;
 
 	const auto sdcard = Environment::getExternalStorageDirectory();
@@ -602,12 +639,21 @@ Java_org_musicpd_Bridge_shutdown(JNIEnv *, jclass)
 		global_instance->Break();
 }
 
+gcc_visibility_default
+JNIEXPORT void JNICALL
+Java_org_musicpd_Bridge_pause(JNIEnv *, jclass)
+{
+	if (global_instance != nullptr)
+		for (auto &partition : global_instance->partitions)
+			partition.pc.LockSetPause(true);
+}
+
 #else
 
 static inline void
 MainOrThrow(int argc, char *argv[])
 {
-	struct options options;
+	CommandLineOptions options;
 	ConfigData raw_config;
 
 	ParseCommandLine(argc, argv, options, raw_config);
@@ -615,27 +661,26 @@ MainOrThrow(int argc, char *argv[])
 	MainConfigured(options, raw_config);
 }
 
-int mpd_main(int argc, char *argv[]) noexcept
+int
+mpd_main(int argc, char *argv[])
 {
-	AtScopeExit() { log_deinit(); };
-
-	try {
-		MainOrThrow(argc, argv);
-		return EXIT_SUCCESS;
-	} catch (...) {
-		LogError(std::current_exception());
-		return EXIT_FAILURE;
-	}
+	MainOrThrow(argc, argv);
+	return EXIT_SUCCESS;
 }
 
 int
 main(int argc, char *argv[]) noexcept
-{
+try {
+	AtScopeExit() { log_deinit(); };
+
 #ifdef _WIN32
 	return win32_main(argc, argv);
 #else
 	return mpd_main(argc, argv);
 #endif
+} catch (...) {
+	LogError(std::current_exception());
+	return EXIT_FAILURE;
 }
 
 #endif

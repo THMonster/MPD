@@ -20,6 +20,9 @@
 #include "TimePrint.hxx"
 #include "client/Response.hxx"
 #include "time/ISO8601.hxx"
+#include "util/StringBuffer.hxx"
+
+#include <fmt/format.h>
 
 void
 time_print(Response &r, const char *name,
@@ -33,5 +36,5 @@ time_print(Response &r, const char *name,
 		return;
 	}
 
-	r.Format("%s: %s\n", name, s.c_str());
+	r.Fmt(FMT_STRING("{}: {}\n"), name, s);
 }

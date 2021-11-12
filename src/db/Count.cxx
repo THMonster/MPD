@@ -27,6 +27,8 @@
 #include "tag/VisitFallback.hxx"
 #include "TagPrint.hxx"
 
+#include <fmt/format.h>
+
 #include <functional>
 #include <map>
 
@@ -47,9 +49,9 @@ PrintSearchStats(Response &r, const SearchStats &stats) noexcept
 	unsigned total_duration_s =
 		std::chrono::duration_cast<std::chrono::seconds>(stats.total_duration).count();
 
-	r.Format("songs: %u\n"
-		 "playtime: %u\n",
-		 stats.n_songs, total_duration_s);
+	r.Fmt(FMT_STRING("songs: {}\n"
+			 "playtime: {}\n"),
+	      stats.n_songs, total_duration_s);
 }
 
 static void
@@ -76,7 +78,7 @@ static void
 CollectGroupCounts(TagCountMap &map, const Tag &tag,
 		   const char *value) noexcept
 {
-	auto &s = map.insert(std::make_pair(value, SearchStats())).first->second;
+	auto &s = map.emplace(value, SearchStats()).first->second;
 	++s.n_songs;
 	if (!tag.duration.IsNegative())
 		s.total_duration += tag.duration;

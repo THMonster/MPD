@@ -56,7 +56,7 @@ and unpack it (or `clone the git repository
 In any case, you need:
 
 * a C++17 compiler (e.g. GCC 8 or clang 7)
-* `Meson 0.49.0 <http://mesonbuild.com/>`__ and `Ninja
+* `Meson 0.56.0 <http://mesonbuild.com/>`__ and `Ninja
   <https://ninja-build.org/>`__
 * Boost 1.58
 * pkg-config 
@@ -69,6 +69,7 @@ For example, the following installs a fairly complete list of build dependencies
 .. code-block:: none
 
     apt install meson g++ \
+      libfmt-dev \
       libpcre3-dev \
       libmad0-dev libmpg123-dev libid3tag0-dev \
       libflac-dev libvorbis-dev libopus-dev libogg-dev \
@@ -110,6 +111,19 @@ The following command shows a list of compile-time options:
 
  meson configure output/release
 
+NB: Check the sysconfdir setting to determine where mpd will look for mpd.conf; if you expect mpd to look for /etc/mpd.conf the sysconfdir must be '/etc' (i.e., not 'etc' which will result in mpd looking for /usr/local/etc/mpd.conf):
+ 
+.. code-block:: none
+ 
+ meson configure output/release |grep sysconfdir
+
+If this is not /etc (or another path you wish to specify):
+
+.. code-block:: none
+
+ $ meson configure output/release -Dsysconfdir='/etc' ; meson configure output/release |grep syscon
+  sysconfdir              /etc                                               Sysconf data directory
+
 When everything is ready and configured, compile:
 
 .. code-block:: none
@@ -144,7 +158,7 @@ This section is about the latter.
 You need:
 
 * `mingw-w64 <http://mingw-w64.org/doku.php>`__
-* `Meson 0.49.0 <http://mesonbuild.com/>`__ and `Ninja
+* `Meson 0.56.0 <http://mesonbuild.com/>`__ and `Ninja
   <https://ninja-build.org/>`__
 * cmake
 * pkg-config
@@ -158,7 +172,9 @@ tarball and change into the directory.  Then, instead of
 
  mkdir -p output/win64
  cd output/win64
- ../../win32/build.py --64
+ ../../win32/build.py --64 \
+   --buildtype=debugoptimized -Db_ndebug=true \
+   -Dwrap_mode=forcefallback
 
 This downloads various library sources, and then configures and builds
 :program:`MPD` (for x64; to build a 32 bit binary, pass
@@ -167,6 +183,11 @@ contains all the libraries already and you do not need carry DLLs
 around. It is large, but easy to use. If you wish to have a small
 mpd.exe with DLLs, you need to compile manually, without the
 :file:`build.py` script.
+
+The option ``-Dwrap_mode=forcefallback`` tells Meson to download and
+cross-compile several libraries used by MPD instead of looking for
+them on your computer.
+
 
 Compiling for Android
 ---------------------
@@ -177,7 +198,7 @@ You need:
 
 * Android SDK
 * `Android NDK r23 <https://developer.android.com/ndk/downloads>`_
-* `Meson 0.49.0 <http://mesonbuild.com/>`__ and `Ninja
+* `Meson 0.56.0 <http://mesonbuild.com/>`__ and `Ninja
   <https://ninja-build.org/>`__
 * cmake
 * pkg-config
@@ -191,8 +212,10 @@ tarball and change into the directory.  Then, instead of
 
  mkdir -p output/android
  cd output/android
- ../../android/build.py SDK_PATH NDK_PATH ABI
- meson configure -Dandroid_debug_keystore=$HOME/.android/debug.keystore
+ ../../android/build.py SDK_PATH NDK_PATH ABI \
+   --buildtype=debugoptimized -Db_ndebug=true \
+   -Dwrap_mode=forcefallback \
+   -Dandroid_debug_keystore=$HOME/.android/debug.keystore
  ninja android/apk/mpd-debug.apk
 
 :envvar:`SDK_PATH` is the absolute path where you installed the
@@ -625,6 +648,9 @@ By default, all clients are unauthenticated and have a full set of permissions. 
      - Allows reading of the database, displaying the current playlist, and current status of :program:`MPD`.
    * - **add**
      - Allows adding songs and loading playlists.
+   * - **player**
+     - Allows any player and queue manipulation (start/pause/stop
+       playback etc.).
    * - **control**
      - Allows all other player and playlist manipulations.
    * - **admin**
@@ -632,6 +658,9 @@ By default, all clients are unauthenticated and have a full set of permissions. 
        mounting/unmounting storage and shutting down :program:`MPD`.
 
 :code:`local_permissions` may be used to assign other permissions to clients connecting on a local socket.
+
+:code:`host_permissions` may be used to assign permissions to clients
+with a certain IP address.
 
 :code:`password` allows the client to send a password to gain other permissions. This option may be specified multiple times with different passwords.
 
@@ -642,6 +671,8 @@ Example:
 .. code-block:: none
 
     default_permissions "read"
+    host_permissions "192.168.0.100 read,add,control,admin"
+    host_permissions "2003:1234:4567::1 read,add,control,admin"
     password "the_password@read,add,control"
     password "the_admin_password@read,add,control,admin"
 
@@ -1204,6 +1235,34 @@ Your bug report should contain:
 * your configuration file (:file:`mpd.conf`)
 * relevant portions of the log file (:option:`--verbose`)
 * be clear about what you expect MPD to do, and what is actually happening
+
+.. _profiler:
+
+Too Much CPU Usage
+^^^^^^^^^^^^^^^^^^
+
+If you believe MPD consumes too much CPU, `write a bug report
+<https://github.com/MusicPlayerDaemon/MPD/issues>`_ with a profiling
+information.
+
+On Linux, this can be obtained with :program:`perf` (on Debian,
+installed the package :file:`linux-perf`), for example::
+
+ perf record -p `pidof mpd`
+
+Run this command while MPD consumes much CPU, let it run for a minute
+or so, and stop it by pressing ``Ctrl-C``.  Then type::
+
+ perf report >mpd_perf.txt
+
+Upload the output file to the bug report.
+
+.. note::
+
+   This requires having debug symbols for MPD and all relevant
+   libraries.  See :ref:`crash` for details.
+
+.. _crash:
 
 MPD crashes
 ^^^^^^^^^^^

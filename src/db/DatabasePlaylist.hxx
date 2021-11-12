@@ -25,11 +25,27 @@
 class Database;
 class Storage;
 struct DatabaseSelection;
+class PlaylistFileEditor;
 
 gcc_nonnull(3)
 void
 search_add_to_playlist(const Database &db, const Storage *storage,
 		       const char *playlist_path_utf8,
 		       const DatabaseSelection &selection);
+
+/**
+ * @return the number of songs added
+ */
+unsigned
+SearchInsertIntoPlaylist(const Database &db, const Storage *storage,
+			 const DatabaseSelection &selection,
+			 PlaylistFileEditor &playlist,
+			 unsigned position);
+
+void
+SearchInsertIntoPlaylist(const Database &db, const Storage *storage,
+			 const DatabaseSelection &selection,
+			 const char *playlist_name,
+			 unsigned position);
 
 #endif

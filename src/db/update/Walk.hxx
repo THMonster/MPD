@@ -22,7 +22,6 @@
 
 #include "Config.hxx"
 #include "Editor.hxx"
-#include "util/Compiler.h"
 #include "config.h"
 
 #include <atomic>
@@ -32,6 +31,7 @@ struct StorageFileInfo;
 struct Directory;
 struct ArchivePlugin;
 struct PlaylistPlugin;
+class SongEnumerator;
 class ArchiveFile;
 class Storage;
 class ExcludeList;
@@ -76,7 +76,7 @@ public:
 	bool Walk(Directory &root, const char *path, bool discard) noexcept;
 
 private:
-	gcc_pure
+	[[gnu::pure]]
 	bool SkipSymlink(const Directory *directory,
 			 std::string_view utf8_name) const noexcept;
 
@@ -88,19 +88,22 @@ private:
 	/**
 	 * Remove all virtual songs inside playlists whose "target"
 	 * field points to a non-existing song file.
+	 *
+	 * It also looks up all target songs and sets their
+	 * "in_playlist" field.
 	 */
 	void PurgeDanglingFromPlaylists(Directory &directory) noexcept;
 
 	void UpdateSongFile2(Directory &directory,
-			     const char *name, const char *suffix,
+			     const char *name, std::string_view suffix,
 			     const StorageFileInfo &info) noexcept;
 
 	bool UpdateSongFile(Directory &directory,
-			    const char *name, const char *suffix,
+			    const char *name, std::string_view suffix,
 			    const StorageFileInfo &info) noexcept;
 
 	bool UpdateContainerFile(Directory &directory,
-				 std::string_view name, const char *suffix,
+				 std::string_view name, std::string_view suffix,
 				 const StorageFileInfo &info) noexcept;
 
 
@@ -109,7 +112,7 @@ private:
 			       const char *name) noexcept;
 
 	bool UpdateArchiveFile(Directory &directory,
-			       std::string_view name, const char *suffix,
+			       std::string_view name, std::string_view suffix,
 			       const StorageFileInfo &info) noexcept;
 
 	void UpdateArchiveFile(Directory &directory, std::string_view name,
@@ -120,18 +123,21 @@ private:
 #else
 	bool UpdateArchiveFile([[maybe_unused]] Directory &directory,
 			       [[maybe_unused]] const char *name,
-			       [[maybe_unused]] const char *suffix,
+			       [[maybe_unused]] std::string_view suffix,
 			       [[maybe_unused]] const StorageFileInfo &info) noexcept {
 		return false;
 	}
 #endif
+
+	void UpdatePlaylistFile(Directory &directory,
+				SongEnumerator &contents) noexcept;
 
 	void UpdatePlaylistFile(Directory &parent, std::string_view name,
 				const StorageFileInfo &info,
 				const PlaylistPlugin &plugin) noexcept;
 
 	bool UpdatePlaylistFile(Directory &directory,
-				std::string_view name, const char *suffix,
+				std::string_view name, std::string_view suffix,
 				const StorageFileInfo &info) noexcept;
 
 	bool UpdateRegularFile(Directory &directory,

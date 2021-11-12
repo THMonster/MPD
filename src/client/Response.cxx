@@ -19,8 +19,8 @@
 
 #include "Response.hxx"
 #include "Client.hxx"
-#include "util/FormatString.hxx"
-#include "util/AllocatedString.hxx"
+
+#include <fmt/format.h>
 
 TagMask
 Response::GetTagMask() const noexcept
@@ -41,19 +41,15 @@ Response::Write(const char *data) noexcept
 }
 
 bool
-Response::FormatV(const char *fmt, std::va_list args) noexcept
+Response::VFmt(fmt::string_view format_str, fmt::format_args args) noexcept
 {
-	return Write(FormatStringV(fmt, args).c_str());
-}
-
-bool
-Response::Format(const char *fmt, ...) noexcept
-{
-	std::va_list args;
-	va_start(args, fmt);
-	bool success = FormatV(fmt, args);
-	va_end(args);
-	return success;
+	fmt::memory_buffer buffer;
+#if FMT_VERSION >= 80000
+	fmt::vformat_to(std::back_inserter(buffer), format_str, args);
+#else
+	fmt::vformat_to(buffer, format_str, args);
+#endif
+	return Write(buffer.data(), buffer.size());
 }
 
 bool
@@ -62,11 +58,7 @@ Response::WriteBinary(ConstBuffer<void> payload) noexcept
 	assert(payload.size <= client.binary_limit);
 
 	return
-#ifdef _WIN32
-		Format("binary: %lu\n", (unsigned long)payload.size) &&
-#else
-		Format("binary: %zu\n", payload.size) &&
-#endif
+		Fmt("binary: {}\n", payload.size) &&
 		Write(payload.data, payload.size) &&
 		Write("\n");
 }
@@ -74,19 +66,21 @@ Response::WriteBinary(ConstBuffer<void> payload) noexcept
 void
 Response::Error(enum ack code, const char *msg) noexcept
 {
-	FormatError(code, "%s", msg);
+	Fmt(FMT_STRING("ACK [{}@{}] {{{}}} "),
+	    (int)code, list_index, command);
+
+	Write(msg);
+	Write("\n");
 }
 
 void
-Response::FormatError(enum ack code, const char *fmt, ...) noexcept
+Response::VFmtError(enum ack code,
+		    fmt::string_view format_str, fmt::format_args args) noexcept
 {
-	Format("ACK [%i@%u] {%s} ",
-	       (int)code, list_index, command);
+	Fmt(FMT_STRING("ACK [{}@{}] {{{}}} "),
+	    (int)code, list_index, command);
 
-	std::va_list args;
-	va_start(args, fmt);
-	FormatV(fmt, args);
-	va_end(args);
+	VFmt(format_str, std::move(args));
 
 	Write("\n");
 }

@@ -27,6 +27,7 @@
 #include "Listener.hxx"
 #include "PlaylistError.hxx"
 #include "player/Control.hxx"
+#include "protocol/RangeArg.hxx"
 #include "song/DetachedSong.hxx"
 #include "SongLoader.hxx"
 
@@ -141,12 +142,12 @@ playlist::SwapPositions(PlayerControl &pc, unsigned song1, unsigned song2)
 
 		queue.SwapOrders(queue.PositionToOrder(song1),
 				 queue.PositionToOrder(song2));
-	} else {
+	} else if (current >= 0){
 		/* correct the "current" song order */
 
-		if (current == (int)song1)
+		if (unsigned(current) == song1)
 			current = song2;
-		else if (current == (int)song2)
+		else if (unsigned(current) == song2)
 			current = song1;
 	}
 
@@ -168,16 +169,13 @@ playlist::SwapIds(PlayerControl &pc, unsigned id1, unsigned id2)
 
 void
 playlist::SetPriorityRange(PlayerControl &pc,
-			   unsigned start, unsigned end,
+			   RangeArg range,
 			   uint8_t priority)
 {
-	if (start >= GetLength())
+	if (!range.CheckClip(GetLength()))
 		throw PlaylistError::BadRange();
 
-	if (end > GetLength())
-		end = GetLength();
-
-	if (start >= end)
+	if (range.IsEmpty())
 		return;
 
 	/* remember "current" and "queued" */
@@ -187,7 +185,7 @@ playlist::SetPriorityRange(PlayerControl &pc,
 
 	/* apply the priority changes */
 
-	queue.SetPriorityRange(start, end, priority, current);
+	queue.SetPriorityRange(range.start, range.end, priority, current);
 
 	/* restore "current" and choose a new "queued" */
 
@@ -206,7 +204,7 @@ playlist::SetPriorityId(PlayerControl &pc,
 	if (song_position < 0)
 		throw PlaylistError::NoSuchSong();
 
-	SetPriorityRange(pc, song_position, song_position + 1, priority);
+	SetPriorityRange(pc, {unsigned(song_position), song_position + 1U}, priority);
 }
 
 void
@@ -272,22 +270,19 @@ playlist::DeletePosition(PlayerControl &pc, unsigned song)
 }
 
 void
-playlist::DeleteRange(PlayerControl &pc, unsigned start, unsigned end)
+playlist::DeleteRange(PlayerControl &pc, RangeArg range)
 {
-	if (start >= queue.GetLength())
+	if (!range.CheckClip(GetLength()))
 		throw PlaylistError::BadRange();
 
-	if (end > queue.GetLength())
-		end = queue.GetLength();
-
-	if (start >= end)
+	if (range.IsEmpty())
 		return;
 
 	const DetachedSong *queued_song = GetQueuedSong();
 
 	do {
-		DeleteInternal(pc, --end, &queued_song);
-	} while (end != start);
+		DeleteInternal(pc, --range.end, &queued_song);
+	} while (range.end != range.start);
 
 	UpdateQueuedSong(pc, queued_song);
 	OnModified();
@@ -320,51 +315,33 @@ playlist::StaleSong(PlayerControl &pc, const char *uri) noexcept
 }
 
 void
-playlist::MoveRange(PlayerControl &pc,
-		    unsigned start, unsigned end, int to)
+playlist::MoveRange(PlayerControl &pc, RangeArg range, unsigned to)
 {
-	if (!queue.IsValidPosition(start) || !queue.IsValidPosition(end - 1))
+	if (!queue.IsValidPosition(range.start) ||
+	    !queue.IsValidPosition(range.end - 1))
 		throw PlaylistError::BadRange();
 
-	if ((to >= 0 && to + end - start - 1 >= GetLength()) ||
-	    (to < 0 && unsigned(std::abs(to)) > GetLength()))
+	if (to + range.Count() - 1 >= GetLength())
 		throw PlaylistError::BadRange();
 
-	if ((int)start == to)
+	if (range.start == to)
 		/* nothing happens */
 		return;
 
 	const DetachedSong *const queued_song = GetQueuedSong();
 
-	/*
-	 * (to < 0) => move to offset from current song
-	 * (-playlist.length == to) => move to position BEFORE current song
-	 */
-	const int currentSong = GetCurrentPosition();
-	if (to < 0) {
-		if (currentSong < 0)
-			/* can't move relative to current song,
-			   because there is no current song */
-			throw PlaylistError::BadRange();
+	queue.MoveRange(range.start, range.end, to);
 
-		if (start <= (unsigned)currentSong && (unsigned)currentSong < end)
-			/* no-op, can't be moved to offset of itself */
-			return;
-		to = (currentSong + std::abs(to)) % GetLength();
-		if (start < (unsigned)to)
-			to -= end - start;
-	}
-
-	queue.MoveRange(start, end, to);
-
-	if (!queue.random) {
-		/* update current/queued */
-		if ((int)start <= current && (unsigned)current < end)
-			current += to - start;
-		else if (current >= (int)end && current <= to)
-			current -= end - start;
-		else if (current >= to && current < (int)start)
-			current += end - start;
+	if (!queue.random && current >= 0) {
+		/* update current */
+		if (range.Contains(current))
+			current += to - range.start;
+		else if (unsigned(current) >= range.end &&
+			 unsigned(current) <= to)
+			current -= range.Count();
+		else if (unsigned(current) >= to &&
+			 unsigned(current) < range.start)
+			current += range.Count();
 	}
 
 	UpdateQueuedSong(pc, queued_song);
@@ -372,23 +349,12 @@ playlist::MoveRange(PlayerControl &pc,
 }
 
 void
-playlist::MoveId(PlayerControl &pc, unsigned id1, int to)
+playlist::Shuffle(PlayerControl &pc, RangeArg range)
 {
-	int song = queue.IdToPosition(id1);
-	if (song < 0)
-		throw PlaylistError::NoSuchSong();
+	if (!range.CheckClip(GetLength()))
+		throw PlaylistError::BadRange();
 
-	MoveRange(pc, song, song + 1, to);
-}
-
-void
-playlist::Shuffle(PlayerControl &pc, unsigned start, unsigned end) noexcept
-{
-	if (end > GetLength())
-		/* correct the "end" offset */
-		end = GetLength();
-
-	if (start + 1 >= end)
+	if (!range.HasAtLeast(2))
 		/* needs at least two entries. */
 		return;
 
@@ -396,17 +362,17 @@ playlist::Shuffle(PlayerControl &pc, unsigned start, unsigned end) noexcept
 	if (playing && current >= 0) {
 		unsigned current_position = queue.OrderToPosition(current);
 
-		if (current_position >= start && current_position < end) {
+		if (range.Contains(current_position)) {
 			/* put current playing song first */
-			queue.SwapPositions(start, current_position);
+			queue.SwapPositions(range.start, current_position);
 
 			if (queue.random) {
-				current = queue.PositionToOrder(start);
+				current = queue.PositionToOrder(range.start);
 			} else
-				current = start;
+				current = range.start;
 
 			/* start shuffle after the current song */
-			start++;
+			range.start++;
 		}
 	} else {
 		/* no playback currently: reset current */
@@ -414,7 +380,7 @@ playlist::Shuffle(PlayerControl &pc, unsigned start, unsigned end) noexcept
 		current = -1;
 	}
 
-	queue.ShuffleRange(start, end);
+	queue.ShuffleRange(range.start, range.end);
 
 	UpdateQueuedSong(pc, queued_song);
 	OnModified();

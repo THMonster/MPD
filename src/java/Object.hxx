@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 Max Kellermann <max.kellermann@gmail.com>
+ * Copyright 2010-2021 Max Kellermann <max.kellermann@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,40 +37,32 @@
 #include <cassert>
 
 namespace Java {
-	/**
-	 * Wrapper for a local "jobject" reference.
-	 */
-	typedef LocalRef<jobject> LocalObject;
 
-	class GlobalObject : public GlobalRef<jobject> {
-	public:
-		/**
-		 * Constructs an uninitialized object.  The method
-		 * set() must be called before it is destructed.
-		 */
-		GlobalObject() = default;
+/**
+ * Wrapper for a local "jobject" reference.
+ */
+using LocalObject = LocalRef<jobject>;
 
-		GlobalObject(JNIEnv *env, jobject obj) noexcept
-			:GlobalRef<jobject>(env, obj) {}
-	};
+using GlobalObject = GlobalRef<jobject>;
 
-	/**
-	 * Utilities for java.net.Object.
-	 */
-	class Object {
-		static jmethodID toString_method;
+/**
+ * Utilities for java.net.Object.
+ */
+class Object {
+	static jmethodID toString_method;
 
-	public:
-		static void Initialise(JNIEnv *env);
+public:
+	static void Initialise(JNIEnv *env);
 
-		static jstring toString(JNIEnv *env, jobject o) {
-			assert(env != nullptr);
-			assert(o != nullptr);
-			assert(toString_method != nullptr);
+	static jstring toString(JNIEnv *env, jobject o) {
+		assert(env != nullptr);
+		assert(o != nullptr);
+		assert(toString_method != nullptr);
 
-			return (jstring)env->CallObjectMethod(o, toString_method);
-		}
-	};
-}
+		return (jstring)env->CallObjectMethod(o, toString_method);
+	}
+};
+
+} // namespace Java
 
 #endif

@@ -26,6 +26,7 @@
 #include "song/DetachedSong.hxx"
 #include "SongLoader.hxx"
 #include "Mapper.hxx"
+#include "protocol/RangeArg.hxx"
 #include "fs/io/TextFile.hxx"
 #include "fs/io/FileOutputStream.hxx"
 #include "fs/io/BufferedOutputStream.hxx"
@@ -34,7 +35,6 @@
 #include "config/Defaults.hxx"
 #include "Idle.hxx"
 #include "fs/Limits.hxx"
-#include "fs/AllocatedPath.hxx"
 #include "fs/Traits.hxx"
 #include "fs/FileSystem.hxx"
 #include "fs/FileInfo.hxx"
@@ -173,11 +173,8 @@ ListPlaylistFiles()
 }
 
 static void
-SavePlaylistFile(const PlaylistFileContents &contents, const char *utf8path)
+SavePlaylistFile(Path path_fs, const PlaylistFileContents &contents)
 {
-	assert(utf8path != nullptr);
-
-	const auto path_fs = spl_map_to_fs(utf8path);
 	assert(!path_fs.IsNull());
 
 	FileOutputStream fos(path_fs);
@@ -191,12 +188,11 @@ SavePlaylistFile(const PlaylistFileContents &contents, const char *utf8path)
 	fos.Commit();
 }
 
-PlaylistFileContents
-LoadPlaylistFile(const char *utf8path)
+static PlaylistFileContents
+LoadPlaylistFile(Path path_fs)
 try {
 	PlaylistFileContents contents;
 
-	const auto path_fs = spl_map_to_fs(utf8path);
 	assert(!path_fs.IsNull());
 
 	TextFile file(path_fs);
@@ -251,16 +247,54 @@ try {
 	throw;
 }
 
-void
-spl_move_index(const char *utf8path, unsigned src, unsigned dest)
+static PlaylistFileContents
+MaybeLoadPlaylistFile(Path path_fs, PlaylistFileEditor::LoadMode load_mode)
+try {
+	if (load_mode == PlaylistFileEditor::LoadMode::NO)
+		return {};
+
+	return LoadPlaylistFile(path_fs);
+} catch (const PlaylistError &error) {
+	if (error.GetCode() == PlaylistResult::NO_SUCH_LIST &&
+	    load_mode == PlaylistFileEditor::LoadMode::TRY)
+		return {};
+
+	throw;
+ }
+
+PlaylistFileEditor::PlaylistFileEditor(const char *name_utf8,
+				       LoadMode load_mode)
+	:path(spl_map_to_fs(name_utf8)),
+	 contents(MaybeLoadPlaylistFile(path, load_mode))
 {
-	if (src == dest)
-		/* this doesn't check whether the playlist exists, but
-		   what the hell.. */
-		return;
+}
 
-	auto contents = LoadPlaylistFile(utf8path);
+void
+PlaylistFileEditor::Insert(std::size_t i, const char *uri)
+{
+	if (i > size())
+		throw PlaylistError(PlaylistResult::BAD_RANGE, "Bad position");
 
+	if (size() >= playlist_max_length)
+		throw PlaylistError(PlaylistResult::TOO_LARGE,
+				    "Stored playlist is too large");
+
+	contents.emplace(std::next(contents.begin(), i), uri);
+}
+
+void
+PlaylistFileEditor::Insert(std::size_t i, const DetachedSong &song)
+{
+	const char *uri = playlist_saveAbsolutePaths
+		? song.GetRealURI()
+		: song.GetURI();
+
+	Insert(i, uri);
+}
+
+void
+PlaylistFileEditor::MoveIndex(unsigned src, unsigned dest)
+{
 	if (src >= contents.size() || dest >= contents.size())
 		throw PlaylistError(PlaylistResult::BAD_RANGE, "Bad range");
 
@@ -270,9 +304,31 @@ spl_move_index(const char *utf8path, unsigned src, unsigned dest)
 
 	const auto dest_i = std::next(contents.begin(), dest);
 	contents.insert(dest_i, std::move(value));
+}
 
-	SavePlaylistFile(contents, utf8path);
+void
+PlaylistFileEditor::RemoveIndex(unsigned i)
+{
+	if (i >= contents.size())
+		throw PlaylistError(PlaylistResult::BAD_RANGE, "Bad range");
 
+	contents.erase(std::next(contents.begin(), i));
+}
+
+void
+PlaylistFileEditor::RemoveRange(RangeArg range)
+{
+	if (!range.CheckClip(size()))
+		throw PlaylistError::BadRange();
+
+	contents.erase(std::next(contents.begin(), range.start),
+		       std::next(contents.begin(), range.end));
+}
+
+void
+PlaylistFileEditor::Save()
+{
+	SavePlaylistFile(path, contents);
 	idle_add(IDLE_STORED_PLAYLIST);
 }
 
@@ -311,20 +367,6 @@ spl_delete(const char *name_utf8)
 			throw;
 	}
 
-	idle_add(IDLE_STORED_PLAYLIST);
-}
-
-void
-spl_remove_index(const char *utf8path, unsigned pos)
-{
-	auto contents = LoadPlaylistFile(utf8path);
-
-	if (pos >= contents.size())
-		throw PlaylistError(PlaylistResult::BAD_RANGE, "Bad range");
-
-	contents.erase(std::next(contents.begin(), pos));
-
-	SavePlaylistFile(contents, utf8path);
 	idle_add(IDLE_STORED_PLAYLIST);
 }
 

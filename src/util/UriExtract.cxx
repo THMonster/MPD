@@ -46,7 +46,7 @@ IsValidSchemeChar(char ch)
 		ch == '+' || ch == '.' || ch == '-';
 }
 
-gcc_pure
+[[gnu::pure]]
 static bool
 IsValidScheme(std::string_view p) noexcept
 {
@@ -64,7 +64,7 @@ IsValidScheme(std::string_view p) noexcept
  * Return the URI part after the scheme specification (and after the
  * double slash).
  */
-gcc_pure
+[[gnu::pure]]
 static std::string_view
 uri_after_scheme(std::string_view uri) noexcept
 {
@@ -120,36 +120,28 @@ uri_get_path(std::string_view uri) noexcept
 	return uri;
 }
 
-/* suffixes should be ascii only characters */
-const char *
-uri_get_suffix(const char *uri) noexcept
+[[gnu::pure]]
+static StringView
+UriWithoutQueryString(StringView uri) noexcept
 {
-	const char *suffix = std::strrchr(uri, '.');
-	if (suffix == nullptr || suffix == uri ||
-	    suffix[-1] == '/' || suffix[-1] == '\\')
-		return nullptr;
-
-	++suffix;
-
-	if (strpbrk(suffix, "/\\") != nullptr)
-		return nullptr;
-
-	return suffix;
+	return uri.Split('?').first;
 }
 
-const char *
-uri_get_suffix(const char *uri, UriSuffixBuffer &buffer) noexcept
+/* suffixes should be ascii only characters */
+std::string_view
+uri_get_suffix(std::string_view _uri) noexcept
 {
-	const char *suffix = uri_get_suffix(uri);
-	if (suffix == nullptr)
-		return nullptr;
+	const auto uri = UriWithoutQueryString(_uri);
 
-	const char *q = std::strchr(suffix, '?');
-	if (q != nullptr && size_t(q - suffix) < sizeof(buffer.data)) {
-		memcpy(buffer.data, suffix, q - suffix);
-		buffer.data[q - suffix] = 0;
-		suffix = buffer.data;
-	}
+	const char *dot = uri.FindLast('.');
+	if (dot == nullptr || dot == uri.data ||
+	    dot[-1] == '/' || dot[-1] == '\\')
+		return {};
+
+	auto suffix = uri.substr(dot + 1);
+	if (suffix.Find('/') != nullptr || suffix.Find('\\') != nullptr)
+		/* this was not the last path segment */
+		return {};
 
 	return suffix;
 }

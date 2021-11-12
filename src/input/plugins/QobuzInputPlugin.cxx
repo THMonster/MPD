@@ -64,6 +64,9 @@ public:
 		qobuz_client->RemoveLoginHandler(*this);
 	}
 
+	QobuzInputStream(const QobuzInputStream &) = delete;
+	QobuzInputStream &operator=(const QobuzInputStream &) = delete;
+
 	/* virtual methods from InputStream */
 
 	void Check() override {
@@ -171,7 +174,7 @@ FinishQobuzInput() noexcept
 	delete qobuz_client;
 }
 
-gcc_pure
+[[gnu::pure]]
 static const char *
 ExtractQobuzTrackId(const char *uri)
 {

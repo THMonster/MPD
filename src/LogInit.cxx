@@ -234,22 +234,22 @@ cycle_log_files() noexcept
 	if (out_path.IsNull())
 		return 0;
 
-	FormatDebug(log_domain, "Cycling log files");
+	LogDebug(log_domain, "Cycling log files");
 	close_log_files();
 
 	fd = open_log_file();
 	if (fd < 0) {
 		const std::string out_path_utf8 = out_path.ToUTF8();
-		FormatError(log_domain,
-			    "error re-opening log file: %s",
-			    out_path_utf8.c_str());
+		FmtError(log_domain,
+			 "error re-opening log file: {}",
+			 out_path_utf8);
 		return -1;
 	}
 
 	redirect_logs(fd);
 	close(fd);
 
-	FormatDebug(log_domain, "Done cycling log files");
+	LogDebug(log_domain, "Done cycling log files");
 	return 0;
 #endif
 }

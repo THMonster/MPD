@@ -23,7 +23,7 @@ void
 MaskMonitor::OrMask(unsigned new_mask) noexcept
 {
 	if (pending_mask.fetch_or(new_mask) == 0)
-		defer.Schedule();
+		event.Schedule();
 }
 
 void

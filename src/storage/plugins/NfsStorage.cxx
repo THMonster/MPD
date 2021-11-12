@@ -32,8 +32,8 @@
 #include "thread/Cond.hxx"
 #include "event/Loop.hxx"
 #include "event/Call.hxx"
-#include "event/DeferEvent.hxx"
-#include "event/TimerEvent.hxx"
+#include "event/InjectEvent.hxx"
+#include "event/CoarseTimerEvent.hxx"
 #include "util/ASCII.hxx"
 #include "util/StringCompare.hxx"
 
@@ -61,8 +61,8 @@ class NfsStorage final
 
 	NfsConnection *connection;
 
-	DeferEvent defer_connect;
-	TimerEvent reconnect_timer;
+	InjectEvent defer_connect;
+	CoarseTimerEvent reconnect_timer;
 
 	Mutex mutex;
 	Cond cond;
@@ -84,6 +84,9 @@ public:
 		BlockingCall(GetEventLoop(), [this](){ Disconnect(); });
 		nfs_finish();
 	}
+
+	NfsStorage(const NfsStorage &) = delete;
+	NfsStorage &operator=(const NfsStorage &) = delete;
 
 	/* virtual methods from class Storage */
 	StorageFileInfo GetInfo(std::string_view uri_utf8, bool follow) override;
@@ -115,7 +118,7 @@ public:
 		reconnect_timer.Schedule(std::chrono::seconds(5));
 	}
 
-	/* DeferEvent callback */
+	/* InjectEvent callback */
 	void OnDeferredConnect() noexcept {
 		if (state == State::INITIAL)
 			Connect();
@@ -422,7 +425,10 @@ CreateNfsStorageURI(EventLoop &event_loop, const char *base)
 					    server.c_str(), mount);
 }
 
+static constexpr const char *nfs_prefixes[] = { "nfs://", nullptr };
+
 const StoragePlugin nfs_storage_plugin = {
 	"nfs",
+	nfs_prefixes,
 	CreateNfsStorageURI,
 };

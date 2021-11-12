@@ -22,6 +22,7 @@
 #include "storage/StoragePlugin.hxx"
 #include "storage/StorageInterface.hxx"
 #include "storage/FileInfo.hxx"
+#include "lib/fmt/ExceptionFormatter.hxx"
 #include "lib/dbus/Glue.hxx"
 #include "lib/dbus/AsyncRequest.hxx"
 #include "lib/dbus/Message.hxx"
@@ -33,13 +34,16 @@
 #include "thread/Cond.hxx"
 #include "thread/SafeSingleton.hxx"
 #include "event/Call.hxx"
-#include "event/DeferEvent.hxx"
+#include "event/InjectEvent.hxx"
 #include "fs/AllocatedPath.hxx"
+#include "util/Domain.hxx"
 #include "util/StringCompare.hxx"
 #include "util/RuntimeError.hxx"
 #include "Log.hxx"
 
 #include <stdexcept>
+
+static constexpr Domain udisks_domain("udisks");
 
 class UdisksStorage final : public Storage {
 	const std::string base_uri;
@@ -62,7 +66,7 @@ class UdisksStorage final : public Storage {
 
 	std::exception_ptr mount_error;
 
-	DeferEvent defer_mount, defer_unmount;
+	InjectEvent defer_mount, defer_unmount;
 
 public:
 	template<typename B, typename I, typename IP>
@@ -87,11 +91,14 @@ public:
 		try {
 			UnmountWait();
 		} catch (...) {
-			FormatError(std::current_exception(),
-				    "Failed to unmount '%s'",
-				    base_uri.c_str());
+			FmtError(udisks_domain,
+				 "Failed to unmount '{}': {}",
+				 base_uri, std::current_exception());
 		}
 	}
+
+	UdisksStorage(const UdisksStorage &) = delete;
+	UdisksStorage &operator=(const UdisksStorage &) = delete;
 
 	EventLoop &GetEventLoop() const noexcept {
 		return defer_mount.GetEventLoop();
@@ -227,8 +234,7 @@ try {
 						  DBUS_OM_INTERFACE,
 						  "GetManagedObjects");
 		list_request.Send(connection, *msg.Get(),
-				  std::bind(&UdisksStorage::OnListReply,
-					    this, std::placeholders::_1));
+				  [this](auto o) { return OnListReply(std::move(o)); });
 		return;
 	}
 
@@ -239,8 +245,7 @@ try {
 	AppendMessageIter(*msg.Get()).AppendEmptyArray<DictEntryTypeTraits<StringTypeTraits, VariantTypeTraits>>();
 
 	mount_request.Send(connection, *msg.Get(),
-			   std::bind(&UdisksStorage::OnMountNotify,
-				     this, std::placeholders::_1));
+			   [this](auto o) { return OnMountNotify(std::move(o)); });
 } catch (...) {
 	const std::lock_guard<Mutex> lock(mutex);
 	mount_error = std::current_exception();
@@ -297,8 +302,7 @@ try {
 	AppendMessageIter(*msg.Get()).AppendEmptyArray<DictEntryTypeTraits<StringTypeTraits, VariantTypeTraits>>();
 
 	mount_request.Send(connection, *msg.Get(),
-			   std::bind(&UdisksStorage::OnUnmountNotify,
-				     this, std::placeholders::_1));
+			   [this](auto u) { return OnUnmountNotify(std::move(u)); });
 } catch (...) {
 	const std::lock_guard<Mutex> lock(mutex);
 	mount_error = std::current_exception();
@@ -377,7 +381,10 @@ CreateUdisksStorageURI(EventLoop &event_loop, const char *base_uri)
 					       std::move(inside_path));
 }
 
+static constexpr const char *udisks_prefixes[] = { "udisks://", nullptr };
+
 const StoragePlugin udisks_storage_plugin = {
 	"udisks",
+	udisks_prefixes,
 	CreateUdisksStorageURI,
 };

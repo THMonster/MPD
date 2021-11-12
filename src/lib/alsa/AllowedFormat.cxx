@@ -30,12 +30,7 @@ namespace Alsa {
 AllowedFormat::AllowedFormat(StringView s)
 {
 #ifdef ENABLE_DSD
-	const StringView dop_tail("=dop");
-	if (s.EndsWith(dop_tail)) {
-		dop = true;
-		s.size -= dop_tail.size;
-	} else
-		dop = false;
+	dop = s.RemoveSuffix("=dop");
 #endif
 
 	char buffer[64];
@@ -54,7 +49,7 @@ AllowedFormat::AllowedFormat(StringView s)
 }
 
 std::forward_list<AllowedFormat>
-AllowedFormat::ParseList(StringView s)
+AllowedFormat::ParseList(std::string_view s)
 {
 	std::forward_list<AllowedFormat> list;
 	auto tail = list.before_begin();
