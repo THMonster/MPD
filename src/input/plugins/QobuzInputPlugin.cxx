@@ -116,7 +116,7 @@ QobuzInputStream::OnQobuzTrackSuccess(std::string url) noexcept
 	try {
 		SetInput(OpenCurlInputStream(url.c_str(), {{"ForceSeekable", "1"}},
 					     mutex));
-		FormatWarning(qobuz_domain, "Qobuz music file: %s", url.c_str());
+		FmtWarning(qobuz_domain, "Qobuz music file: %s", url.c_str());
 	} catch (...) {
 		Failed(std::current_exception());
 	}

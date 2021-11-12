@@ -358,7 +358,7 @@ CurlInputStream::OnError(std::exception_ptr e) noexcept
       AsyncInputStream::SetClosed();
       return;
     }
-    FormatWarning(curl_domain, "reconnect at %d", appended_data);
+    FmtWarning(curl_domain, "reconnect at %d", appended_data);
 
     FreeEasy();
     InitEasy();
